@@ -1,5 +1,7 @@
 package com.tomansill.redis;
 
+import com.tomansill.redis.lock.RedisReadWriteLock;
+
 import java.io.IOException;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicLong;
@@ -9,24 +11,30 @@ import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.Map;
 
+/** AbstractRedisClient class
+ *  This class is abstract and defines methods for subclasses to implement with their own Redis client.
+ *  @author <a href="mailto:tom@ansill.com">Tom Ansill</a>
+ */
 public abstract class AbstractRedisClient{
 
     // ##### PUBLIC STATIC MEMBERS #####
+
     /** Default lease duration */
-    public static final long DEFAULT_LEASE_DURATION_SECONDS = 60;
+    public final static long DEFAULT_LEASE_DURATION_SECONDS = 60;
 
     // ##### PRIVATE STATIC MEMBERS #####
+
     /* Map of lease durations per server */
-    private static Map<String,Duration> LEASE_DURATION = new HashMap<String,Duration>(1);
+    private final static Map<String,Duration> LEASE_DURATION = new HashMap<String,Duration>(1);
 
     /* Lock for lease duration map */
-    private static ReentrantReadWriteLock LEASE_LOCK = new ReentrantReadWriteLock(true);
+    private final static ReentrantReadWriteLock LEASE_LOCK = new ReentrantReadWriteLock(true);
 
     /* Comfy little class that holds time and time unit */
     private static class Duration{
         private long time;
         private TimeUnit unit;
-        public Duration(long time, TimeUnit unit){
+        public Duration(final long time, final TimeUnit unit){
             this.time = time;
             this.unit = unit;
         }
@@ -36,19 +44,33 @@ public abstract class AbstractRedisClient{
         public synchronized TimeUnit getUnit(){
             return this.unit;
         }
-        public synchronized void set(long time, TimeUnit unit){
+        public synchronized void set(final long time, final TimeUnit unit){
             this.time = time;
             this.unit = unit;
         }
     }
 
+    // ##### CLASS MEMBERS #####
+
+    /** Returns host name and port in format of (hostname):(port)
+     *  @return string format of (hostname):(port)
+     */
     protected abstract String getHostnameAndPort();
 
-    protected abstract String get() throws IOException;
+    /** Returns true if this client is connected to a cluster, false otherwise
+     *  @return true if this client is connected to a cluster, false otherwise
+     */
+    public abstract boolean isCluster();
 
-    protected abstract boolean isCluster() throws IOException;
+    /** Retrieves current lease duration
+     *  @param unit TimeUnit for returned time
+     *  @return time in time unit provided in the parameter
+     *  @throws IllegalArgumentException thrown if unit parameter is null
+     */
+    public long getLeaseDuration(final TimeUnit unit) throws IllegalArgumentException{
 
-    public long getLeaseDuration(TimeUnit unit){
+        // Check unit
+        if(unit == null) throw new IllegalArgumentException("unit is null");
 
         // Result container
         long result = 0;
@@ -75,7 +97,16 @@ public abstract class AbstractRedisClient{
         return result;
     }
 
-    public void setLeaseDuration(long time, TimeUnit unit){
+    /** Sets lease duration
+     *  @param time time
+     *  @param unit TimeUnit
+     *  @throws IllegalArgumentException thrown if unit parameter is null or time is a negative number
+     */
+    public void setLeaseDuration(final long time, final TimeUnit unit){
+
+        // Check unit and time
+        if(unit == null) throw new IllegalArgumentException("unit is null");
+        if(time < 0) throw new IllegalArgumentException("time is not positive");
 
         // Get URL
         String url = this.getHostnameAndPort();
@@ -93,6 +124,10 @@ public abstract class AbstractRedisClient{
 
         // Release lock
         write_lock.unlock();
+    }
+
+    public RedisReadWriteLock getLock(final String lockpoint){
+        return new RedisReadWriteLock(lockpoint, this);
     }
 
     public boolean isFairSupported(){
@@ -119,10 +154,6 @@ public abstract class AbstractRedisClient{
         return false; // For now TODO
     }
 
-    public boolean isInclusiveNewConditionSupported(){
-        return false; // For now TODO
-    }
-
     public boolean isExclusiveEvictionSupported(){
         return true;
     }
@@ -138,4 +169,7 @@ public abstract class AbstractRedisClient{
     public boolean isNonInclusiveEvictionSupported(){
         return true;
     }
+
+    protected abstract String get();
+
 }
