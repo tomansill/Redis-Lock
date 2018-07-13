@@ -1,52 +1,16 @@
 package com.tomansill.redis.lock;
 
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
-public class RedisLock extends ReadWriteLock{
+public interface RedisLock extends Lock{
 
-    private RedisClient client;
+    public boolean isLocked();
 
-    public RedisLock(RedisClient client){
-        this.client = client;
-    }
+    public void lock(long lease_time, TimeUnit unit);
 
-    public getClient(){
-        this.client;
-    }
+    public void lockInterruptibly(long lease_time, TimeUnit unit) throws InterruptedException;
 
-    public class ReadLock extends GenericLock{
+    public boolean tryLock(long wait_time, long lease_time, TimeUnit unit) throws InterruptedException;
 
-        private ReadLock(){}
-
-    }
-
-    public class WriteLock extends GenericLock{
-
-        private WriteLock(){}
-
-    }
-
-    private class GenericLock implements Lock, AutoCloseable{
-
-        public abstract void lock();
-
-        public abstract void lockInterruptibly() throws InterruptedException;
-
-        public abstract boolean tryLock();
-
-        public abstract boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
-
-        public abstract void unlock();
-
-        public Condition newCondition() throws UnsupportedOperationException{
-            throw new UnsupportedOperationException("Not supported");
-        }
-
-        public void close(){
-            this.unlock();
-        }
-    }
 }
