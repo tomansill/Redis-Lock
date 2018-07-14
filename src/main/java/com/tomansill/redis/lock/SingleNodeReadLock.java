@@ -32,7 +32,11 @@ class SingleNodeReadLock extends GenericLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
      */
     public void lock(final TimeUnit unit, final long lease_time){
+
+        // Short circuit if already locked
         if(this.is_locked) return;
+
+
     }
 
     /** Acquires the lock unless the current thread is interrupted.
