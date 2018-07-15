@@ -1,7 +1,5 @@
 package com.tomansill.redis.lock;
 
-import com.tomansill.redis.AbstractRedisClient;
-
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -14,8 +12,8 @@ class SingleNodeReadLock extends GenericLock{
      *  @param rrwl Parent RedisReadWriteLock instance
      *  @throws IllegalArgumentException thrown when rrwl is null
      */
-    SingleNodeReadLock(final RedisReadWriteLock rrwl, final boolean is_fair){
-        super(rrwl, is_fair);
+    SingleNodeReadLock(final RedisReadWriteLock rrwl){
+        super(rrwl);
     }
 
     /** Acquires the lock.
@@ -105,7 +103,7 @@ class SingleNodeReadLock extends GenericLock{
 
     /** Returns a new Condition instance that is bound to this Lock instance.
      *  @return A new Condition instance for this Lock instance
-     *  @throws UnsupportedOperationException if the AbstractRedisClient does not support this
+     *  @throws UnsupportedOperationException if the AbstractRedisLockClient does not support this
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#newCondition--">Lock.newCondition()</a>
      */
     public Condition newCondition() throws UnsupportedOperationException{

@@ -1,7 +1,6 @@
 package com.tomansill.redis.lock;
 
-import com.tomansill.redis.AbstractRedisClient;
-
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -10,27 +9,32 @@ import java.util.concurrent.TimeUnit;
 /** Generic Lock class that provides some implementation to ReadLock and WriteLock subclasses */
 abstract class GenericLock implements AutoCloseableLock{
 
+    /* ID Counter */
+    private final static AtomicLong ID_COUNTER = new AtomicLong(Long.MIN_VALUE);
+
     /** Parent RedisReadWriteLock instance */
     protected final RedisReadWriteLock rrwl;
 
+    /** Lock id */
+    protected final long id;
+
     /** Lock flag */
     protected boolean is_locked = false;
-
-    /** Fair flag */
-    protected boolean is_fair;
 
     /** Abstract constructor
      *  @param rrwl Parent RedisReadWriteLock instance
      *  @throws IllegalArgumentException thrown when rrwl is null
      */
-    protected GenericLock(final RedisReadWriteLock rrwl, final boolean is_fair) throws IllegalArgumentException{
+    protected GenericLock(final RedisReadWriteLock rrwl) throws IllegalArgumentException{
 
         // Check parameter
         if(rrwl == null) throw new IllegalArgumentException("'rrwl' parameter in GenericLock(RedisReadWriteLock) is null");
 
         // Assign parameter to class variable
         this.rrwl = rrwl;
-        this.is_fair = is_fair;
+
+        // Draw unique id number from counter TODO what happens if counter wraps
+        this.id = ID_COUNTER.getAndIncrement();
     }
 
     /** Returns the state of lock
@@ -140,7 +144,7 @@ abstract class GenericLock implements AutoCloseableLock{
 
     /** Returns a new Condition instance that is bound to this Lock instance.
      *  @return A new Condition instance for this Lock instance
-     *  @throws UnsupportedOperationException if the AbstractRedisClient does not support this
+     *  @throws UnsupportedOperationException if the AbstractRedisLockClient does not support this
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#newCondition--">Lock.newCondition()</a>
      */
     public abstract Condition newCondition() throws UnsupportedOperationException;
@@ -151,7 +155,7 @@ abstract class GenericLock implements AutoCloseableLock{
     public abstract void unlock();
 
     /** Releases the lock and closes any underlying resouces
-     *  This method does <b>not</b> close RedisReadWriteLock or the associated AbstractRedisClient instance
+     *  This method does <b>not</b> close RedisReadWriteLock or the associated AbstractRedisLockClient instance
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/AutoCloseable.html#close--">AutoCloseable.close()</a>
      */
     public void close(){
