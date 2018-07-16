@@ -10,7 +10,6 @@ local first_attempt = tonumber(KEYS[5])
 local lock_lease_time = KEYS[6]
 local lockwait_lease_time = KEYS[7]
 local lockwait = "lockwait:" .. KEYS[1]
-local lockchannel = "lockchannel:" .. KEYS[1]
 
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) and (redis.call("LLEN", lockwait) ~= 0) then

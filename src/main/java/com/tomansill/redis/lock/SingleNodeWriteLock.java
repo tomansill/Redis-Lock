@@ -1,9 +1,7 @@
 package com.tomansill.redis.lock;
 
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
 
 /** SingleNodeWriteLock class */
 class SingleNodeWriteLock extends GenericLock{
@@ -26,7 +24,6 @@ class SingleNodeWriteLock extends GenericLock{
     }
 
     /** Acquires the lock.
-     *  @param wait_time the maximum time to wait for the lock
      *  @param lease_time lock lease time
      *  @param unit the time unit of the time argument
      *  @throws IllegalArgumentException thrown if unit or lease_time is invalid
@@ -43,19 +40,16 @@ class SingleNodeWriteLock extends GenericLock{
     }
 
     /** Internal function for locking
-     *  @param wait_time the maximum time to wait for the lock
      *  @param lease_time lock lease time
      *  @param unit the time unit of the time argument
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
      */
     private void innerLock(final TimeUnit unit, final long lease_time){
-
-        // Short circuit
-        if(this.is_locked) return;
-
-        // Lock it
-        if(unit == null) this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair());
-        else this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), lease_time, unit);
+        try{
+            this.innerLockInterruptibly(unit, lease_time);
+        }catch(InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** Acquires the lock unless the current thread is interrupted.
@@ -95,6 +89,13 @@ class SingleNodeWriteLock extends GenericLock{
 
         // Short circuit
         if(this.is_locked) return;
+
+        // Lock it
+        boolean success;
+        if(unit == null) success = this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair());
+        else success = this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), lease_time, unit);
+
+        // If failed, then subscribe to channel
     }
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.

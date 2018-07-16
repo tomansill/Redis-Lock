@@ -8,13 +8,13 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.Map;
+import java.util.function.Predicate;
 
 /** AbstractRedisLockClient class
  *  This class is abstract and defines methods for subclasses to implement with their own Redis client.
@@ -35,30 +35,27 @@ public abstract class AbstractRedisLockClient{
     /** Map of Redis lua script hash */
     private static Map<String, String> SCRIPT_NAME_TO_SCRIPT_HASH = null;
 
-    /* Map of lease durations per server */
+    /** Map of lease durations per server */
     private final static Map<String,Duration> LEASE_DURATION = new HashMap<>(1);
 
-    /* Lock for lease duration map */
+    /** Lock for lease duration map */
     private final static ReentrantReadWriteLock LEASE_LOCK = new ReentrantReadWriteLock(true);
 
-    /** Maximum retries number before quitting */
-    private final static int MAX_RETRIES = 3;
-
-    /* Comfy little class that holds time and time unit */
+    /** Comfy little class that holds time and time unit */
     private static class Duration{
         private long time;
         private TimeUnit unit;
-        public Duration(final long time, final TimeUnit unit){
+        Duration(final long time, final TimeUnit unit){
             this.time = time;
             this.unit = unit;
         }
-        public synchronized long getTime(){
+        synchronized long getTime(){
             return this.time;
         }
-        public synchronized TimeUnit getUnit(){
+         synchronized TimeUnit getUnit(){
             return this.unit;
         }
-        public synchronized void set(final long time, final TimeUnit unit){
+        synchronized void set(final long time, final TimeUnit unit){
             this.time = time;
             this.unit = unit;
         }
@@ -85,6 +82,9 @@ public abstract class AbstractRedisLockClient{
     /** Client id to identify the client */
     private String client_id;
 
+    /** Listener Counter */
+    private AtomicLong listener_users;
+
     /** Constructor for AbstractRedisLockClient
      *  On the first run, AbstractRedisLockClient will retrieve Redis Lua scripts
      *  that are located on the resources directory on the project and load them
@@ -101,8 +101,7 @@ public abstract class AbstractRedisLockClient{
             sr.nextBytes(digest);
             this.client_id = toHex(digest);
         }catch(NoSuchAlgorithmException nsae){
-            // Compiler says unreachable here??? Disable this for now TODO
-            //throw new ExceptionInInitializerError("Failed to initialize the client because SecureRandom does not have a suitable algorithm. Reason: " + nsae.getMessage());;
+            throw new ExceptionInInitializerError("Failed to initialize the client because SecureRandom does not have a suitable algorithm. Reason: " + nsae.getMessage());
         }
 
         // Initialize scripts - done only once
@@ -119,30 +118,33 @@ public abstract class AbstractRedisLockClient{
             String[] filenames = {"single_write_lock", "single_write_unlock", "single_refire"};
 
             // Load scripts
-            for(int i = 0; i < filenames.length; i++){
+            for(String filename : filenames){
 
                 // Get file
-                File file = new File(class_loader.getResource(filenames[i] + ".lua").getFile());
+                File file = new File(class_loader.getResource(filename + ".lua").getFile());
 
                 // Serious error occurs if those files cannot be found
-                if(!file.exists()){
-                    throw new ExceptionInInitializerError("Cannot find '" + filenames[i] + ".lua' on the package resouces directory!");
+                if (file == null || !file.exists()) {
+                    throw new ExceptionInInitializerError("Cannot find '" + filename + ".lua' on the package resouces directory!");
                 }
 
                 // Read the script
                 StringBuilder sb = new StringBuilder();
-                try(BufferedReader br = new BufferedReader(new FileReader(file))){
-                    String line = null;
-                    while((line = br.readLine()) != null) sb.append(line);
-                }catch(IOException ioe){
-                    throw new ExceptionInInitializerError("Failed to read '" + filenames[i] + ".lua' on the package resouces directory! Reason: " + ioe.getMessage());
+                try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                } catch (IOException ioe) {
+                    throw new ExceptionInInitializerError("Failed to read '" + filename + ".lua' on the package resouces directory! Reason: " + ioe.getMessage());
                 }
 
                 // Add it to the script
-                SCRIPT_NAME_TO_SCRIPTS.put(filenames[i], sb.toString());
-                SCRIPT_NAME_TO_SCRIPT_HASH.put(filenames[i], null);
+                SCRIPT_NAME_TO_SCRIPTS.put(filename, sb.toString());
+                SCRIPT_NAME_TO_SCRIPT_HASH.put(filename, null);
             }
         }
+
+        // Initialize listener_users
+        this.listener_users = new AtomicLong(0);
     }
 
     /** Returns host name and port in format of (hostname):(port)
@@ -166,7 +168,7 @@ public abstract class AbstractRedisLockClient{
         if(unit == null) throw new IllegalArgumentException("unit is null");
 
         // Result container
-        long result = 0;
+        long result;
 
         // Get URL
         String url = this.getHostnameAndPort();
@@ -223,6 +225,10 @@ public abstract class AbstractRedisLockClient{
         return new RedisReadWriteLock(lockpoint, this);
     }
 
+    public RedisReadWriteLock getLock(final String lockpoint, final boolean is_fair){
+        return new RedisReadWriteLock(lockpoint, this, is_fair);
+    }
+
     /** Loads script on the server and retrieve SHA1 digest of script
      *  @param script Lua script
      *  @return SHA1 digest of script
@@ -245,11 +251,38 @@ public abstract class AbstractRedisLockClient{
      */
     protected abstract String stringEval(final String hash, final String... args) throws NoScriptFoundException;
 
+    /** Subscribes to channel
+     *  @param channel channel name
+     *  @param function function to fire when new topic comes up
+     *  @return string hash of function
+     */
+    protected abstract String subscribe(final String channel, final Predicate<String> function);
+
+    /** Unsunscribes channel
+     *  @param channel channel name
+     *  @param function_hash hash to identify function on the channel
+     */
+    protected abstract void unsubscribe(final String channel, final String function_hash);
+
+    private void setUpSubscription(){
+
+        // Build a function pointer
+        Predicate<String> fire_function = (message) -> {
+            return true;
+        };
+
+        // Set up subscription
+        this.subscribe("lockchannel", fire_function);
+    }
+
+    private void tearDownSubscription(){
+        this.unsubscribe("lockchannel", "");
+    }
+
     /** Performs a single write lock
      *  @param lockpoint lockpoint to acquire a lock
      *  @param lock_id id of lock
      *  @param is_fair true to enforce fairness policy, false otherwise
-     *  @param first_time TODO
      *  @return true if lock was acquired, false otherwise
      */
     boolean singleWriteLock(final String lockpoint, final String lock_id, final boolean is_fair){
@@ -273,9 +306,21 @@ public abstract class AbstractRedisLockClient{
         // Get TimeUnit
         TimeUnit ms_unit = TimeUnit.MILLISECONDS;
 
+        // Check if anyone else has set up listener thread. If they haven't, then set it up
+        /*  REASON WHY WE DO THIS NOW INSTEAD OF ON UNSUCCESSFUL LOCK
+         *  Suppose we attempt to lock but it is unavailable, as soon as the locking script exits,
+         *  other lock may unlock the lockpoint then announce and exit the unlocking script.
+         *  Then this lock will fire the subscription but it had already missed the announcement
+         *  and get stuck on waiting for lock message that may never arrive.
+         */
+        if(this.listener_users.getAndIncrement() == 0){
+            this.setUpSubscription();
+        }
+
         // Execute it
+        boolean result;
         try{
-            return booleanEval(
+            result = booleanEval(
                 SCRIPT_NAME_TO_SCRIPT_HASH.get(script_name),
                 lockpoint,
                 lock_id,
@@ -293,7 +338,7 @@ public abstract class AbstractRedisLockClient{
                 SCRIPT_NAME_TO_SCRIPT_HASH.put(script_name, this.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get(script_name)));
 
                 // Try again
-                return booleanEval(
+                result = booleanEval(
                     SCRIPT_NAME_TO_SCRIPT_HASH.get(script_name),
                     lockpoint,
                     lock_id,
@@ -308,11 +353,13 @@ public abstract class AbstractRedisLockClient{
                 throw new RuntimeException(nsfe_again); //TODO different exception
             }
         }
+
+        // Check if success
+        return result;
     }
 
     /** Performs a single write unlock
-     *  @param lockpoint lockpoint to acquire a lock
-     *  @return true if lock was acquired, false otherwise
+     *  @param lockpoint lockpoint to unlock
      */
     void singleWriteUnlock(final String lockpoint){
 
@@ -340,6 +387,11 @@ public abstract class AbstractRedisLockClient{
                 // AbstractRedisLockClient is hosed at this point
                 throw new RuntimeException(nsfe_again); //TODO different exception
             }
+        }
+
+        // Countdown and check if anyone else is using it. If not, unsubscribe
+        if(this.listener_users.getAndDecrement() == 0){
+            this.tearDownSubscription();
         }
     }
 }

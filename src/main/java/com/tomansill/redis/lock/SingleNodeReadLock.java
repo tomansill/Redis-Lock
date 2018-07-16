@@ -1,9 +1,7 @@
 package com.tomansill.redis.lock;
 
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
 
 /** SingleNodeReadLock class */
 class SingleNodeReadLock extends GenericLock{
@@ -24,7 +22,6 @@ class SingleNodeReadLock extends GenericLock{
     }
 
     /** Acquires the lock.
-     *  @param wait_time the maximum time to wait for the lock
      *  @param lease_time lock lease time
      *  @param unit the time unit of the time argument
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
@@ -33,7 +30,6 @@ class SingleNodeReadLock extends GenericLock{
 
         // Short circuit if already locked
         if(this.is_locked) return;
-
 
     }
 

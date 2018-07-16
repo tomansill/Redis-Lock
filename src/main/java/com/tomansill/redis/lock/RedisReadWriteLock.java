@@ -1,9 +1,7 @@
 package com.tomansill.redis.lock;
 
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.TimeUnit;
 
 /** RedisReadWriteLock class
  *  The ReadWriteLock implements ReadWriteLock's methods and returns read and write locks.
