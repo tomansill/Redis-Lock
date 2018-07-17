@@ -91,20 +91,20 @@ class SingleNodeWriteLock extends GenericLock{
         if(this.is_locked) return;
 
         // Lock it
-        boolean success;
-        if(unit == null) success = this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair());
-        else success = this.rrwl.getClient().singleWriteLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), lease_time, unit);
-
-        // If failed, then subscribe to channel
+        if(unit == null) this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, null);
+        else this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, unit, lease_time);
     }
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
      *  @return true if the lock was acquired and false if the waiting time elapsed before the lock was acquired
-     *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
     public boolean tryLock(){
-        if(this.is_locked) return true;
+        try{
+            return this.innerTryLock(0, TimeUnit.MILLISECONDS, 0);
+        }catch(InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
         return false;
     }
 
@@ -115,7 +115,17 @@ class SingleNodeWriteLock extends GenericLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock--">Lock.tryLock()</a>
      */
     public boolean tryLock(final TimeUnit unit, final long lease_time){
-        if(this.is_locked) return true;
+
+        // Check parameters
+        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
+        if(lease_time <= 0) throw new IllegalArgumentException("lease_time parameter is below the minimum value of 1");
+
+        // Lock it
+        try{
+            return this.innerTryLock(0, unit, lease_time);
+        }catch(InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
         return false;
     }
 
@@ -127,8 +137,13 @@ class SingleNodeWriteLock extends GenericLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
     public boolean tryLock(final long time, final TimeUnit unit) throws InterruptedException{
-        if(this.is_locked) return true;
-        return false;
+
+        // Check parameters
+        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
+        if(time <= 0) throw new IllegalArgumentException("time parameter is below the minimum value of 1");
+
+        // Lock it
+        return this.innerTryLock(time, unit, 0);
     }
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
@@ -139,9 +154,25 @@ class SingleNodeWriteLock extends GenericLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
-    public boolean tryLock(final long wait_time, final TimeUnit unit, final long lease_time)  throws InterruptedException{
+    public boolean tryLock(final long wait_time, final TimeUnit unit, final long lease_time) throws InterruptedException{
+
+        // Check parameters
+        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
+        if(wait_time <= 0) throw new IllegalArgumentException("wait_time parameter is below the minimum value of 1");
+        if(lease_time <= 0) throw new IllegalArgumentException("wait_time parameter is below the minimum value of 1");
+
+        // Lock it
+        return this.innerTryLock(wait_time, unit, lease_time);
+    }
+
+    private boolean innerTryLock(final long wait_time, final TimeUnit unit, final long lease_time) throws InterruptedException{
+
+        // Short circuit
         if(this.is_locked) return true;
-        return false;
+
+        // Lock it
+        if(unit == null) return this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, null);
+        else return this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, unit, lease_time);
     }
 
     /** Returns a new Condition instance that is bound to this Lock instance.

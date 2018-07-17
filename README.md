@@ -25,10 +25,10 @@ The project aims to be loosely coupled and independent of specific Java Redis li
 	 - Condition (Not Started)
  - Clients (Not Started)
  	 **NOTE:** The implemented clients will be available as a separate and dependent package in the future.
-	 - [Jedis](https://github.com/xetorthio/jedis) (Not Started)
+	 - [Jedis](https://github.com/xetorthio/jedis) (Work-In-Progress)
 	 - [Lettuce](https://github.com/lettuce-io/lettuce-core) (Not Started)
  - Testing (Not Started)
-	 - Multiple WriteLocks (Not Started)
+	 - Multiple WriteLocks (Work-In-Progress)
 	 - Multiple ReadLocks (Not Started)
 	 - Multiple ReadLocks after single WriteLock (Not Started)
 	 - Multiple ReadLocks before single WriteLock (Not Started)
