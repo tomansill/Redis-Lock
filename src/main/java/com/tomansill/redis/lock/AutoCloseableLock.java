@@ -7,7 +7,7 @@ public interface AutoCloseableLock extends AutoCloseable, Lock{
     /** Performs lock() and returns the lock
      *  @return Locked lock
      */
-    Lock doLock();
+    AutoCloseableRedisLock doLock();
 
     /** Performs lockInterruptibly() and returns the lock
      *  @return Locked lock

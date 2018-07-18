@@ -18,6 +18,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
     private JedisPool pool = null;
 
     /** */
+    private Jedis listener = null;
+
+    /** */
     private final ConcurrentHashMap<String,JedisPubSub> listeners = new ConcurrentHashMap<>();
 
     public JedisLockClient(final Jedis jedis){
@@ -53,13 +56,23 @@ public class JedisLockClient extends AbstractRedisLockClient {
      */
     @Override
     protected String scriptLoad(final String script) {
+
+        System.out.println("script " + script);
+
+        // TODO
+        String result = null;
         if(this.connection != null){
-            return this.connection.scriptLoad(script);
+            result = this.connection.scriptLoad(script);
         }else{
             try(Jedis jedis = this.pool.getResource()){
-                return jedis.scriptLoad(script);
+                result = jedis.scriptLoad(script);
             }
         }
+
+        System.out.println("sha " + result);
+
+
+        return result;
     }
 
     /**
@@ -72,6 +85,10 @@ public class JedisLockClient extends AbstractRedisLockClient {
      */
     @Override
     protected boolean booleanEval(final String hash, final String... args) throws NoScriptFoundException {
+        for (String str : args){
+            System.out.println(str);
+        }
+
         if(this.connection != null){
             Object return_obj = this.connection.evalsha(hash, args.length, args);
             if(return_obj instanceof Boolean){
@@ -80,8 +97,11 @@ public class JedisLockClient extends AbstractRedisLockClient {
         }else{
             try(Jedis jedis = this.pool.getResource()){
                 Object return_obj = jedis.evalsha(hash, args.length, args);
-                if(return_obj instanceof Boolean){
-                    return ((Boolean)return_obj).booleanValue();
+                if(return_obj == null) throw new RuntimeException("returned null"); //TODO
+                else if(return_obj instanceof Long){
+                    long res = ((Long)return_obj).longValue();
+                    if(res == 0) return false;
+                    else return true;
                 }else throw new RuntimeException(return_obj.getClass().getName()); //TODO
             }
         }
@@ -133,11 +153,20 @@ public class JedisLockClient extends AbstractRedisLockClient {
 
         // Hook it up
         if(this.connection != null){
-            this.connection.subscribe(l, channel);
+            final Jedis con = this.connection;
+            new Thread(() -> {
+                System.out.println("run");
+                con.subscribe(l, channel);
+                System.out.println("exit");
+            }).start();
         }else{
-            try(Jedis jedis = this.pool.getResource()){
-                jedis.subscribe(l, channel);
-            }
+            this.listener = this.pool.getResource();
+            final Jedis con = this.listener;
+            new Thread(() -> {
+                System.out.println("run");
+                con.subscribe(l, channel);
+                System.out.println("exit");
+            }).start();
         }
 
         return id;
@@ -151,7 +180,13 @@ public class JedisLockClient extends AbstractRedisLockClient {
      */
     @Override
     protected void unsubscribe(final String channel, final String function_hash) {
+
+        System.out.println("unsubscribe");
+
         this.listeners.remove(function_hash).unsubscribe();
+
+        System.out.println("toredown");
+
     }
 
     private class Listener extends JedisPubSub{
@@ -160,9 +195,11 @@ public class JedisLockClient extends AbstractRedisLockClient {
 
         public Listener(Predicate<String> function){
             this.function = function;
+            System.out.println("Listener");
         }
 
         public void onMessage(final String channel, final String message){
+            System.out.println("MESSAGE: " + message);
             this.function.test(message);
         }
     }

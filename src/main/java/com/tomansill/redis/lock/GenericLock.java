@@ -3,7 +3,6 @@ package com.tomansill.redis.lock;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
 
 /** Generic Lock class that provides some implementation to ReadLock and WriteLock subclasses */
 abstract class GenericLock implements AutoCloseableRedisLock{
@@ -105,7 +104,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
     /** Performs lock() and returns the lock
      *  @return Locked lock
      */
-    public Lock doLock(){
+    public GenericLock doLock(){
         this.lock();
         return this;
     }
@@ -115,7 +114,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @param unit the time unit of the time argument
      *  @return Locked lock
      */
-    public Lock doLock(final TimeUnit unit, final long lease_time){
+    public GenericLock doLock(final TimeUnit unit, final long lease_time){
         this.lock(unit, lease_time);
         return this;
     }
@@ -124,7 +123,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @return Locked lock
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      */
-    public Lock doLockInterruptibly() throws InterruptedException{
+    public GenericLock doLockInterruptibly() throws InterruptedException{
         this.lockInterruptibly();
         return this;
     }
@@ -135,7 +134,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @return Locked lock
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      */
-    public Lock doLockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
+    public GenericLock doLockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
         this.lockInterruptibly(unit, lease_time);
         return this;
     }
@@ -157,6 +156,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/AutoCloseable.html#close--">AutoCloseable.close()</a>
      */
     public void close(){
+        System.out.println("GenericLock::close()");
         this.unlock();
     }
 }

@@ -15,11 +15,16 @@ local lockwait = "lockwait:" .. KEYS[1]
 if (first_attempt == 1) and (is_fair == 1) and (redis.call("LLEN", lockwait) ~= 0) then
     redis.call("RPUSH", lockwait, client_lock_id)
     redis.call("PEXPIRE", lockwait, lockwait_lease_time)
-    return false
+    return 0
 end
 
+-- Notify others that the lock is picked up
+--if first_attempt == 0 then
+   --redis.call("NOTIFY", "lockchannel", "TODO_MESSAGE")
+--end
+
 -- Lock it
-if redis.call("SET", lockpoint, "ex", "NX", "PX", lock_lease_time) then
+if redis.call("SET", lockpoint, "something", "NX", "PX", lock_lease_time) then
     -- Success
     -- If this is not first attempt, then the lockwait needs to be popped
     if (first_attempt == 0) and (is_fair == 1) then
@@ -28,12 +33,12 @@ if redis.call("SET", lockpoint, "ex", "NX", "PX", lock_lease_time) then
             redis.call("DEL", lockwait)
         end
     end
-    return true
+    return 1
 else
     -- Lock failed
     if (first_attempt == 1) and (is_fair == 1) then
         redis.call("RPUSH", lockwait, client_lock_id)
         redis.call("PEXPIRE", lockwait, lockwait_lease_time)
     end
-    return false
+    return 0
 end

@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
 /** SingleNodeWriteLock class */
-class SingleNodeWriteLock extends GenericLock{
+class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
 
     /** Creates WriteLock instance
      *  @param rrwl Parent RedisReadWriteLock instance
@@ -91,8 +91,8 @@ class SingleNodeWriteLock extends GenericLock{
         if(this.is_locked) return;
 
         // Lock it
-        if(unit == null) this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, null);
-        else this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, unit, lease_time);
+        if(unit == null) this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, null);
+        else this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, unit, lease_time);
     }
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
@@ -171,8 +171,8 @@ class SingleNodeWriteLock extends GenericLock{
         if(this.is_locked) return true;
 
         // Lock it
-        if(unit == null) return this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, null);
-        else return this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, unit, lease_time);
+        if(unit == null) return (this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, null));
+        else return (this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, unit, lease_time));
     }
 
     /** Returns a new Condition instance that is bound to this Lock instance.
@@ -189,10 +189,18 @@ class SingleNodeWriteLock extends GenericLock{
      */
     public void unlock(){
 
+        System.out.println("SingleNodeWriteLock::unlock()");
+
         // Short circuit
         if(!this.is_locked) return;
 
+
+        System.out.println("SingleNodeWriteLock::unlock()");
+
         // Unlock
         this.rrwl.getClient().singleWriteUnlock(this.rrwl.getLockpoint());
+
+        // Update flag
+        this.is_locked = false;
     }
 }

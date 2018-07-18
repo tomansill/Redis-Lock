@@ -1,6 +1,5 @@
 package com.tomansill.redis.lock;
 
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 
 /** RedisReadWriteLock class
@@ -76,7 +75,7 @@ public class RedisReadWriteLock implements ReadWriteLock{
      *  @throws UnsupportedOperationException thrown if AbstractRedisLockClient associated to the instance does not support read locks
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/ReadWriteLock.html#readLock--">ReadWriteLock.readLock()</a>
      */
-    public Lock readLock(){
+    public AutoCloseableRedisLock readLock(){
 
         // Return ReadLock
         if(this.client.isCluster()) return null;
@@ -88,7 +87,7 @@ public class RedisReadWriteLock implements ReadWriteLock{
      *  @throws UnsupportedOperationException thrown if AbstractRedisLockClient associated to the instance does not support write locks
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/ReadWriteLock.html#writeLock--">ReadWriteLock.writeLock()</a>
      */
-    public Lock writeLock(){
+    public AutoCloseableRedisLock writeLock(){
 
         // Return WriteLock
         if(this.client.isCluster()) return null;

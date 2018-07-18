@@ -14,7 +14,7 @@ public class TestJedisLockClient {
 
     @BeforeClass
     public static void setUp(){
-        pool = new JedisPool(new JedisPoolConfig(), TestAbstractRedisLockClient.HOSTNAME + ":" + TestAbstractRedisLockClient.PORT);
+        pool = new JedisPool(new JedisPoolConfig(), TestAbstractRedisLockClient.HOSTNAME, TestAbstractRedisLockClient.PORT);
         client = new JedisLockClient(pool);
         TestAbstractRedisLockClient.setUp(client);
     }
@@ -24,8 +24,17 @@ public class TestJedisLockClient {
         pool.close();
     }
 
+    //@Test
+    public void testSingleWriteLock(){
+        System.out.println("#####################################\n#####################################");
+        TestAbstractRedisLockClient.testSingleWriteLock();
+        System.out.println("#####################################\n#####################################");
+    }
+
     @Test
     public void testWriteLock(){
+        System.out.println("#####################################\n#####################################");
         TestAbstractRedisLockClient.testWriteLock();
+        System.out.println("#####################################\n#####################################");
     }
 }
