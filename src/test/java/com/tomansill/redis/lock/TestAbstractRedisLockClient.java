@@ -81,8 +81,7 @@ public class TestAbstractRedisLockClient {
             Lock lock = rrwl.writeLock();
             lock.lock();
             test1.countDown();
-            data.set(1, TimeUnit.SECONDS, "1");
-            System.out.println("done!");
+            data.set(5, TimeUnit.SECONDS, "1");
             lock.unlock();
         });
 
@@ -90,7 +89,6 @@ public class TestAbstractRedisLockClient {
             // Wait for thread 1
             try {
                 test1.await();
-                System.out.println("done waiting!");
             }catch(Exception e){
                 assertTrue("Lock failed! Exception message: " + e.getMessage(), false);
             }
@@ -98,7 +96,6 @@ public class TestAbstractRedisLockClient {
             // Lock it!
             Lock lock = rrwl.writeLock();
             lock.lock();
-            System.out.println("locked!");
             data.set(100, TimeUnit.MILLISECONDS, "2");
             lock.unlock();
 
@@ -116,6 +113,8 @@ public class TestAbstractRedisLockClient {
 
         assertTrue("Control test failed, the test is flawed", !data.isCorrupted());
 
+        System.out.println("###### NEW TEST #######");
+
         final CountDownLatch test2 = new CountDownLatch(1);
         data.reset();
 
@@ -123,7 +122,7 @@ public class TestAbstractRedisLockClient {
             // Lock it!
             try(AutoCloseableRedisLock lock = client.getLock("test_lockpoint").writeLock().doLock()){
                 test2.countDown();
-                data.set(1, TimeUnit.SECONDS, "1");
+                data.set(5, TimeUnit.SECONDS, "1");
                 System.out.println("done!");
             }catch(Exception e){
                 assertTrue("Lock failed! Exception message: " + e.getMessage(), false);
@@ -141,7 +140,7 @@ public class TestAbstractRedisLockClient {
 
             // Lock it!
             try(AutoCloseableRedisLock lock = client.getLock("test_lockpoint").writeLock().doLock()){
-                System.out.println("locked!");
+                System.out.println("locked! id:2");
                 data.set(100, TimeUnit.MILLISECONDS, "2");
             }catch(Exception e){
                 assertTrue("Lock failed! Exception message: " + e.getMessage(), false);

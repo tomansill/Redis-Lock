@@ -26,9 +26,9 @@ public class TestJedisLockClient {
 
     //@Test
     public void testSingleWriteLock(){
-        System.out.println("#####################################\n#####################################");
-        TestAbstractRedisLockClient.testSingleWriteLock();
-        System.out.println("#####################################\n#####################################");
+        //System.out.println("#####################################\n#####################################");
+        //TestAbstractRedisLockClient.testSingleWriteLock();
+        //System.out.println("#####################################\n#####################################");
     }
 
     @Test

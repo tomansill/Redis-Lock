@@ -20,7 +20,7 @@ end
 
 -- Notify others that the lock is picked up
 --if first_attempt == 0 then
-   --redis.call("NOTIFY", "lockchannel", "TODO_MESSAGE")
+   --redis.call("PUBLISH", "lockchannel", "TODO_MESSAGE")
 --end
 
 -- Lock it

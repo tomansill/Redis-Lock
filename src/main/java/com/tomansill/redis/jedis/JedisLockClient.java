@@ -7,6 +7,7 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPubSub;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 public class JedisLockClient extends AbstractRedisLockClient {
@@ -18,7 +19,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
     private JedisPool pool = null;
 
     /** */
-    private Jedis listener = null;
+    private Jedis listener_connection = null;
 
     /** */
     private final ConcurrentHashMap<String,JedisPubSub> listeners = new ConcurrentHashMap<>();
@@ -57,7 +58,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
     @Override
     protected String scriptLoad(final String script) {
 
-        System.out.println("script " + script);
+        //System.out.println("script " + script);
 
         // TODO
         String result = null;
@@ -69,7 +70,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
             }
         }
 
-        System.out.println("sha " + result);
+        //System.out.println("sha " + result);
 
 
         return result;
@@ -86,7 +87,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
     @Override
     protected boolean booleanEval(final String hash, final String... args) throws NoScriptFoundException {
         for (String str : args){
-            System.out.println(str);
+            //System.out.println(str);
         }
 
         if(this.connection != null){
@@ -140,32 +141,34 @@ public class JedisLockClient extends AbstractRedisLockClient {
      * @return string hash of function
      */
     @Override
-    protected String subscribe(final String channel, final Predicate<String> function) {
+    protected synchronized String subscribe(final String channel, final Predicate<String> function) {
+
+        //System.out.println("subscribe(channel=" + channel + ")");
 
         // Get function hash
-        String id = function.hashCode() + "";
+        String id = function.hashCode() + ""; //TODO what for?
 
-        // Create listener
-        Listener l = new Listener(function);
-
-        // Add into list
-        this.listeners.put(channel, l);
+        // Get or create new Pubsub
+        if(!this.listeners.containsKey(channel)){
+            this.listeners.put(channel, new Listener(function));
+        }
+        final JedisPubSub listener = this.listeners.get(channel);
 
         // Hook it up
         if(this.connection != null){
             final Jedis con = this.connection;
             new Thread(() -> {
-                System.out.println("run");
-                con.subscribe(l, channel);
-                System.out.println("exit");
+                //System.out.println("run");
+                con.subscribe(listener, channel);
+                //System.out.println("exit");
             }).start();
         }else{
-            this.listener = this.pool.getResource();
-            final Jedis con = this.listener;
+            this.listener_connection = this.pool.getResource();
+            final Jedis con = this.listener_connection;
             new Thread(() -> {
-                System.out.println("run");
-                con.subscribe(l, channel);
-                System.out.println("exit");
+                //System.out.println("run");
+                con.subscribe(listener, channel);
+                //System.out.println("exit");
             }).start();
         }
 
@@ -173,7 +176,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
     }
 
     /**
-     * Unsunscribes channel
+     * Unsubscribe channel
      *
      * @param channel       channel name
      * @param function_hash hash to identify function on the channel
@@ -181,11 +184,11 @@ public class JedisLockClient extends AbstractRedisLockClient {
     @Override
     protected void unsubscribe(final String channel, final String function_hash) {
 
-        System.out.println("unsubscribe");
+        //System.out.println("unsubscribe(channel=" + channel + ")");
 
-        this.listeners.remove(function_hash).unsubscribe();
+        this.listeners.remove(channel).unsubscribe();
 
-        System.out.println("toredown");
+        //System.out.println("toredown");
 
     }
 
@@ -193,9 +196,11 @@ public class JedisLockClient extends AbstractRedisLockClient {
 
         private Predicate<String> function;
 
+        AtomicLong counter = new AtomicLong();
+
         public Listener(Predicate<String> function){
             this.function = function;
-            System.out.println("Listener");
+            //System.out.println("Listener " + counter.incrementAndGet());
         }
 
         public void onMessage(final String channel, final String message){

@@ -8,7 +8,7 @@ import java.util.concurrent.locks.Condition;
 abstract class GenericLock implements AutoCloseableRedisLock{
 
     /* ID Counter */
-    private final static AtomicLong ID_COUNTER = new AtomicLong(Long.MIN_VALUE);
+    private final static AtomicLong ID_COUNTER = new AtomicLong();
 
     /** Parent RedisReadWriteLock instance */
     protected final RedisReadWriteLock rrwl;
@@ -156,7 +156,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/AutoCloseable.html#close--">AutoCloseable.close()</a>
      */
     public void close(){
-        System.out.println("GenericLock::close()");
+        System.out.println("GenericLock::close() id: " + this.id);
         this.unlock();
     }
 }

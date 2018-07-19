@@ -87,6 +87,8 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      */
     private void innerLockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
 
+        System.out.println("SingleNodeWriteLock::innerLockInterruptibly() id= " + this.id);
+
         // Short circuit
         if(this.is_locked) return;
 
@@ -189,16 +191,16 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      */
     public void unlock(){
 
-        System.out.println("SingleNodeWriteLock::unlock()");
+        System.out.println("SingleNodeWriteLock::unlock() id= " + this.id);
 
         // Short circuit
         if(!this.is_locked) return;
 
 
-        System.out.println("SingleNodeWriteLock::unlock()");
+        //System.out.println("SingleNodeWriteLock::unlock()");
 
         // Unlock
-        this.rrwl.getClient().singleWriteUnlock(this.rrwl.getLockpoint());
+        this.rrwl.getClient().writeUnlock(this.rrwl.getLockpoint(), this.id + "");
 
         // Update flag
         this.is_locked = false;
