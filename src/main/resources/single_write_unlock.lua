@@ -8,7 +8,9 @@ local element = redis.call("LINDEX", "lockwait:" .. KEYS[1], 0)
 
 -- If empty, either nobody is waiting on queue or there's unfair locks waiting for it
 if(not element) then
-    element = "."
+    element = "#"
+else
+    element = "o:" .. element
 end
 
 -- Call it

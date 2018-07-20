@@ -19,9 +19,9 @@ if (first_attempt == 1) and (is_fair == 1) and (redis.call("LLEN", lockwait) ~= 
 end
 
 -- Notify others that the lock is picked up
---if first_attempt == 0 then
-   --redis.call("PUBLISH", "lockchannel", "TODO_MESSAGE")
---end
+if first_attempt == 0 then
+   redis.call("PUBLISH", "lockchannel", "c:" .. client_lock_id)
+end
 
 -- Lock it
 if redis.call("SET", lockpoint, "something", "NX", "PX", lock_lease_time) then

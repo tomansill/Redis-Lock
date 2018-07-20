@@ -156,7 +156,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/AutoCloseable.html#close--">AutoCloseable.close()</a>
      */
     public void close(){
-        System.out.println("GenericLock::close() id: " + this.id);
+        //System.out.println("GenericLock::close() id: " + this.id);
         this.unlock();
     }
 }

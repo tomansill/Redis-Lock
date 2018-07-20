@@ -86,9 +86,11 @@ public class JedisLockClient extends AbstractRedisLockClient {
      */
     @Override
     protected boolean booleanEval(final String hash, final String... args) throws NoScriptFoundException {
-        for (String str : args){
-            //System.out.println(str);
-        }
+        //System.out.print("booleanEval(");
+        //for (String str : args){
+            //System.out.print(str + " ");
+        //}
+        //System.out.println();
 
         if(this.connection != null){
             Object return_obj = this.connection.evalsha(hash, args.length, args);
@@ -204,7 +206,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
         }
 
         public void onMessage(final String channel, final String message){
-            System.out.println("MESSAGE: " + message);
+            //System.out.println("MESSAGE: " + message);
             this.function.test(message);
         }
     }

@@ -59,21 +59,6 @@ public abstract class AbstractRedisLockClient{
         }
     }
 
-    /** Converts byte array to hex string
-     *  @param array byte array
-     *  @return hex string
-     */
-    private static String toHex(final byte[] array){
-        char[] mapping = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
-        char[] new_str = new char[array.length * 2];
-        for(int i = 0; i < array.length; i++){
-            int map_index = array[i] & 0xFF;
-            new_str[i * 2] = mapping[map_index >>> 4];
-            new_str[(i * 2) + 1] = mapping[map_index & 0x0F];
-        }
-        return new String(new_str);
-    }
-
     // ##### CLASS MEMBERS #####
 
     /** Client id to identify the client */
@@ -98,10 +83,13 @@ public abstract class AbstractRedisLockClient{
 
         // Create unique ID //TODO ID too long?
         try{
-            byte[] digest = new byte[32];
+            byte[] digest = new byte[8];
             SecureRandom sr = SecureRandom.getInstanceStrong();
             sr.nextBytes(digest);
-            this.client_id = toHex(digest);
+            this.client_id = Utility.toHex(digest);
+
+            System.out.println("Client id: " + this.client_id);
+
         }catch(NoSuchAlgorithmException nsae){
             throw new ExceptionInInitializerError("Failed to initialize the client because SecureRandom does not have a suitable algorithm. Reason: " + nsae.getMessage());
         }
@@ -242,63 +230,19 @@ public abstract class AbstractRedisLockClient{
         // Set up subscription listener
         if(first_time && this.listener_users.getAndIncrement() == 0){
 
-            System.out.println("adding subscription: " + (this.listener_users.get() - 1) + " lock id: " + lock_id);
-
             // Build a function pointer
             Predicate<String> fire_function = (message) -> {
 
-                //System.out.println("fired: " + message);
+                // Fire function to process message
+                this.processMessage(message);
 
-                // Check if valid client and lock id pair
-                int index = message.indexOf(":");
-                String id = null;
-                if(index == -1){
-
-                    // Randomly choose an element
-                    synchronized(this.unfair_locks_set){
-                        if(this.unfair_locks_set.iterator().hasNext()){
-                            id = this.unfair_locks_set.iterator().next();
-                        }
-                    }
-
-                    // Check if not null
-                    if(id != null){
-                        System.out.println("found id: " + id);
-                        System.out.flush();
-                        CountDownLatch cdl = this.lock_to_cdl_map.get(id);
-                        if(cdl == null){
-                            // TODO run refire function
-                            System.err.println("panic 2");
-                        }else cdl.countDown();
-                    }
-                }else{
-
-                    // Get client id and lock id
-                    String client_id = message.substring(0, index - 1);
-                    id = message.substring(index + 1, message.length());
-
-                    // Check if client id matches this instance
-                    if (!this.client_id.equals(client_id)) {
-                        // TODO run refire function
-                        System.err.println("panic 3");
-                    }
-
-                    // Get a matching lock and fire its CDL
-                    CountDownLatch cdl = this.lock_to_cdl_map.remove(id);
-                    if(cdl == null){
-                        // TODO run refire function
-                        System.err.println("panic 4");
-                    }else cdl.countDown();
-                }
-
+                // Does nothing
                 return true;
             };
 
             // Set up subscription
             this.subscribe("lockchannel", fire_function);
-            }
-
-        System.out.println("subscribe - lock id: "+ lock_id + " is_fair: " + is_fair);
+        }
 
         // Subscribe
         CountDownLatch cdl = new CountDownLatch(1);
@@ -309,8 +253,6 @@ public abstract class AbstractRedisLockClient{
 
     private void tearDownSubscription(final String lock_id){
 
-        System.out.println("tearDownSubscription(lock_id=" + lock_id + ")");
-
         // Remove entry
         this.lock_to_cdl_map.remove(lock_id);
         synchronized(this.unfair_locks_set) {
@@ -318,9 +260,7 @@ public abstract class AbstractRedisLockClient{
         }
 
         // Countdown and check if anyone else is using it. If not, unsubscribe
-        if(this.listener_users.decrementAndGet() == 0){
-            System.out.println("unsubscribed id:" + lock_id);
-            this.unsubscribe("lockchannel", "");
+        if(this.listener_users.decrementAndGet() == 0){ this.unsubscribe("lockchannel", "");
         }
     }
 
@@ -329,7 +269,6 @@ public abstract class AbstractRedisLockClient{
         // Check if we have script loaded. If not, load it on the database
         if(!SCRIPT_NAME_TO_SCRIPT_HASH.containsKey(script_name)){
             SCRIPT_NAME_TO_SCRIPT_HASH.put(script_name, this.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get(script_name)));
-            //System.out.println("Script name: " + script_name + " " + SCRIPT_NAME_TO_SCRIPT_HASH.get(script_name));
         }
 
         try{
@@ -361,16 +300,14 @@ public abstract class AbstractRedisLockClient{
             lockpoint,
             this.client_id,
             lock_id,
-            is_fair + "",
-            first_attempt + "",
+            is_fair ? "1" : "0",
+            first_attempt ? "1" : "0",
             ms_unit.convert(lock_lease_time, unit) + "",
             DEFAULT_LEASE_DURATION_SECONDS * 1000 + ""
         );
     }
 
     private void performSingleWriteUnlock(final String lockpoint){
-
-        //System.out.println("performSingleWriteUnlock()");
 
         // Evaluate
         this.performBooleanEval(
@@ -399,7 +336,7 @@ public abstract class AbstractRedisLockClient{
     boolean writeLock(final String lockpoint, final String lock_id, final boolean is_fair, final long time_out, final TimeUnit unit, final long lock_lease_time) throws InterruptedException{
 
 
-        System.out.println("writeLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ")");
+        //System.out.println("writeLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ")");
 
         long actual_lease_time = (lock_lease_time < 1 ? getLeaseDuration(unit): lock_lease_time);
         boolean result;
@@ -420,12 +357,12 @@ public abstract class AbstractRedisLockClient{
                 result = this.performSingleWriteLock(lockpoint, lock_id, is_fair, first_attempt, unit, actual_lease_time);
                 first_attempt = false;
 
-                System.out.println("lock id: " + lock_id + " result: " + result);
+                //System.out.println("lock id: " + lock_id + " result: " + result);
 
                 // If it was not success, wait then try again
                 if(!result) {
 
-                    System.out.println("#lock id: " + lock_id + " awaits.");
+                    //System.out.println("#lock id: " + lock_id + " awaits.");
 
                     // Wait for next unlock
                     boolean await_result = true;
@@ -435,7 +372,7 @@ public abstract class AbstractRedisLockClient{
                         await_result = cdl.await(new_time, unit);
                     }
 
-                    System.out.println("#lock id: " + lock_id + " await_result: " + await_result);
+                    //System.out.println("#lock id: " + lock_id + " await_result: " + await_result);
 
                     // Check
                     if (await_result) continue; // Retry to attempt to lock again
@@ -455,8 +392,74 @@ public abstract class AbstractRedisLockClient{
      */
     void writeUnlock(final String lockpoint, final String lock_id){
 
-        System.out.println("writeUnlock(lockpoint=" + lockpoint + ", lock_id=" + lock_id +")");
+        //System.out.println("writeUnlock(lockpoint=" + lockpoint + ", lock_id=" + lock_id +")");
 
         this.performSingleWriteUnlock(lockpoint);
+    }
+
+    private void processMessage(final String message){
+
+        // Check if it's unfair unlock message
+        if(message.equals("#")) { // Unfair
+
+            // "Randomly" choose an element
+            String lock_id = null;
+            synchronized(this.unfair_locks_set) {
+                if(this.unfair_locks_set.iterator().hasNext()) {
+                    lock_id = this.unfair_locks_set.iterator().next();
+                }
+            }
+
+            // Check if the lock actually exists
+            if(lock_id == null) return;
+
+            // Find CDL if there's any and fire it
+            CountDownLatch cdl = this.lock_to_cdl_map.get(lock_id);
+            if(cdl != null) cdl.countDown();
+            else {
+                // TODO run refire function
+                System.err.println("panic 2");
+            }
+
+        } else { // Possibly fair
+
+            // Read the message for the delimiters - find client index and lock index
+            // Message is in format of "<event_type>:<client_id>:<lock_id>"
+            int client_index = message.indexOf(":");
+            int lock_index = message.indexOf(":", client_index + 1);
+
+            // If any of indices are -1, then no ":" are found so the message is invalid
+            if(client_index == -1 || lock_index == -1) return;
+
+            // Extract event type
+            String event_type = message.substring(0, client_index);
+
+            // Check event type
+            if(event_type.equals("c")){ // Claimed event
+
+            }else if(event_type.equals("o")){ // Unlock event
+
+                //Extract client id
+                String client_id = message.substring(client_index + 1, lock_index);
+
+                // Check if client id matches
+                if(!this.client_id.equals(client_id)) { // Doesn't match
+                    // TODO run refire function
+                    System.err.println("panic 3");
+                    return;
+                }
+
+                // Extract lock id
+                String lock_id = message.substring(lock_index + 1, message.length());
+
+                // Find the matching lock and count it down
+                CountDownLatch cdl = this.lock_to_cdl_map.remove(lock_id);
+                if(cdl != null) cdl.countDown();
+                else {
+                    // TODO run refire function
+                    System.err.println("panic 4");
+                }
+            }
+        }
     }
 }

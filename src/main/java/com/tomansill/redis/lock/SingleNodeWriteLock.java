@@ -191,7 +191,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      */
     public void unlock(){
 
-        System.out.println("SingleNodeWriteLock::unlock() id= " + this.id);
+        //System.out.println("SingleNodeWriteLock::unlock() id= " + this.id);
 
         // Short circuit
         if(!this.is_locked) return;
