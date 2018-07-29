@@ -362,7 +362,7 @@ public abstract class AbstractRedisLockClient{
                 // If it was not success, wait then try again
                 if(!result) {
 
-                    //System.out.println("#lock id: " + lock_id + " awaits.");
+                    System.out.println(this.client_id + " #lock id: " + lock_id + " awaits.");
 
                     // Wait for next unlock
                     boolean await_result = true;
@@ -372,7 +372,7 @@ public abstract class AbstractRedisLockClient{
                         await_result = cdl.await(new_time, unit);
                     }
 
-                    //System.out.println("#lock id: " + lock_id + " await_result: " + await_result);
+                    System.out.println(this.client_id + " #lock id: " + lock_id + " await_result: " + await_result);
 
                     // Check
                     if (await_result) continue; // Retry to attempt to lock again
@@ -393,6 +393,8 @@ public abstract class AbstractRedisLockClient{
     void writeUnlock(final String lockpoint, final String lock_id){
 
         //System.out.println("writeUnlock(lockpoint=" + lockpoint + ", lock_id=" + lock_id +")");
+
+        System.out.println(this.client_id + " lock_id: " + lock_id);
 
         this.performSingleWriteUnlock(lockpoint);
     }
@@ -444,8 +446,8 @@ public abstract class AbstractRedisLockClient{
 
                 // Check if client id matches
                 if(!this.client_id.equals(client_id)) { // Doesn't match
-                    // TODO run refire function
-                    System.err.println("panic 3");
+                    // TODO set timer
+                    //System.err.println("panic 3");
                     return;
                 }
 
@@ -458,6 +460,7 @@ public abstract class AbstractRedisLockClient{
                 else {
                     // TODO run refire function
                     System.err.println("panic 4");
+                    System.err.println(this.client_id + " message: " + message);
                 }
             }
         }

@@ -42,4 +42,20 @@ public class TestSingleInstance {
         assertTrue("The fair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS));
 
     }
+
+    public static void testMultipleWriteLocksFairLock(){
+
+        // Check database connection
+        assumeTrue("We are not connected to Redis server, this test cannot continue.",client != null);
+
+        // Set num threads
+        int num_threads = 20;
+
+        // Do control test
+        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleFairLock(new ReentrantReadWriteLock(true), num_threads));
+
+        // Do experiment test with fair locking
+        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleFairLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS));
+
+    }
 }
