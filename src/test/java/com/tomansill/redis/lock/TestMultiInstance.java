@@ -25,7 +25,7 @@ public class TestMultiInstance{
         clients = in_clients;
     }
 
-    public static void testMultipleWriteLocks(){
+    public static void testMultipleWriteLocks(final boolean debug){
 
         // Check database connection
         assumeTrue("We are not connected to Redis server, this test cannot continue.",clients != null);
@@ -40,20 +40,20 @@ public class TestMultiInstance{
         ExecutorService es = Executors.newCachedThreadPool();
 
         // Create threads
-        Future<Boolean>[] futures = new Future[clients.length];
+        Future[] futures = new Future[clients.length];
 
         // Finalize clients
         final AbstractRedisLockClient[] f_clients = clients;
 
         // Iterate threads to build threads for control test number one
         for(int i = 0; i < f_clients.length; i++){
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(null, num_threads));
+            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(null, num_threads, debug));
         }
 
         // Do control test 1
         for(Future<Boolean> future : futures){
             try {
-                assertTrue("The control test number one has failed, the test is flawed.", !future.get().booleanValue());
+                assertTrue("The control test number one has failed, the test is flawed.", !future.get());
             }catch(InterruptedException | ExecutionException e){
                 assertTrue("InterruptedException was thrown. Reason: " + e.getMessage(), false);
             }
@@ -61,7 +61,7 @@ public class TestMultiInstance{
 
         // Iterate threads to build threads for control test number one
         for(int i = 0; i < f_clients.length; i++){
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(rrwl, num_threads));
+            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(rrwl, num_threads, debug));
         }
 
         // Do control test 2
@@ -77,7 +77,7 @@ public class TestMultiInstance{
         final String lockpoint1 = Utility.generateRandomString(8);
         for(int i = 0; i < f_clients.length; i++){
             final int index = i;
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint1), num_threads, 5, TimeUnit.SECONDS));
+            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint1), num_threads, 5, TimeUnit.SECONDS, debug));
         }
 
         // Do experiment test with unfair locking
@@ -93,7 +93,7 @@ public class TestMultiInstance{
         final String lockpoint2 = Utility.generateRandomString(8);
         for(int i = 0; i < f_clients.length; i++){
             final int index = i;
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint2, true), num_threads, 5, TimeUnit.SECONDS));
+            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint2, true), num_threads, 5, TimeUnit.SECONDS, debug));
         }
 
         // Do experiment test with fair locking

@@ -21,7 +21,7 @@ public class TestSingleInstance {
         client = in_client;
     }
 
-    public static void testMultipleWriteLocks(){
+    public static void testMultipleWriteLocks(final boolean debug){
 
         // Check database connection
         assumeTrue("We are not connected to Redis server, this test cannot continue.",client != null);
@@ -30,20 +30,20 @@ public class TestSingleInstance {
         int num_threads = 20;
 
         // Do control test
-        assertTrue("The control test number one has failed, the test is flawed.", !TestFunction.performMultipleWriteLock(null, num_threads));
+        assertTrue("The control test number one has failed, the test is flawed.", !TestFunction.performMultipleWriteLock(null, num_threads, debug));
 
         // Do control test
-        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleWriteLock(new ReentrantReadWriteLock(), num_threads));
+        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleWriteLock(new ReentrantReadWriteLock(), num_threads, debug));
 
         // Do experiment test with unfair locking
-        assertTrue("The unfair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), false), num_threads, 5, TimeUnit.SECONDS));
+        assertTrue("The unfair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), false), num_threads, 5, TimeUnit.SECONDS, debug));
 
         // Do experiment test with fair locking
-        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS));
+        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS, debug));
 
     }
 
-    public static void testMultipleWriteLocksFairLock(){
+    public static void testMultipleWriteLocksFairLock(final boolean debug){
 
         // Check database connection
         assumeTrue("We are not connected to Redis server, this test cannot continue.",client != null);
@@ -52,10 +52,10 @@ public class TestSingleInstance {
         int num_threads = 20;
 
         // Do control test
-        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleFairLock(new ReentrantReadWriteLock(true), num_threads));
+        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleFairLock(new ReentrantReadWriteLock(true), num_threads, debug));
 
         // Do experiment test with fair locking
-        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleFairLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS));
+        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleFairLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS, debug));
 
     }
 }

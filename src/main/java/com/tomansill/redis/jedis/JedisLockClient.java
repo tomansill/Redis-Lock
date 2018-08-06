@@ -1,6 +1,5 @@
 package com.tomansill.redis.jedis;
 
-import com.tomansill.redis.exception.NoScriptFoundException;
 import com.tomansill.redis.lock.AbstractRedisLockClient;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -24,6 +23,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
     /** */
     private final ConcurrentHashMap<String,JedisPubSub> listeners = new ConcurrentHashMap<>();
 
+    /**
+     * @param jedis
+     */
     public JedisLockClient(final Jedis jedis){
 
         // Check parameter
@@ -33,6 +35,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
         this.connection = jedis;
     }
 
+    /**
+     * @param pool
+     */
     public JedisLockClient(final JedisPool pool){
 
         // Check parameter
@@ -61,7 +66,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
         //System.out.println("script " + script);
 
         // TODO
-        String result = null;
+        String result;
         if(this.connection != null){
             result = this.connection.scriptLoad(script);
         }else{
@@ -82,10 +87,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
      * @param hash hash to Lua script
      * @param args argument parameters
      * @return boolean
-     * @throws NoScriptFoundException thrown if the script to the corresponding hash cannot be found on the database
      */
     @Override
-    protected boolean booleanEval(final String hash, final String... args) throws NoScriptFoundException {
+    protected boolean booleanEval(final String hash, final String... args) {
         //System.out.print("booleanEval(");
         //for (String str : args){
             //System.out.print(str + " ");
@@ -95,16 +99,15 @@ public class JedisLockClient extends AbstractRedisLockClient {
         if(this.connection != null){
             Object return_obj = this.connection.evalsha(hash, args.length, args);
             if(return_obj instanceof Boolean){
-                return ((Boolean)return_obj).booleanValue();
+                return (Boolean) return_obj;
             }else throw new RuntimeException(return_obj.getClass().getName()); //TODO
         }else{
             try(Jedis jedis = this.pool.getResource()){
                 Object return_obj = jedis.evalsha(hash, args.length, args);
                 if(return_obj == null) throw new RuntimeException("returned null"); //TODO
                 else if(return_obj instanceof Long){
-                    long res = ((Long)return_obj).longValue();
-                    if(res == 0) return false;
-                    else return true;
+                    long res = (Long) return_obj;
+                    return res != 0;
                 }else throw new RuntimeException(return_obj.getClass().getName()); //TODO
             }
         }
@@ -116,10 +119,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
      * @param hash hash to Lua script
      * @param args argument parameters
      * @return string
-     * @throws NoScriptFoundException thrown if the script to the corresponding hash cannot be found on the database
      */
     @Override
-    protected String stringEval(final String hash, final String... args) throws NoScriptFoundException {
+    protected String stringEval(final String hash, final String... args) {
         if(this.connection != null){
             Object return_obj = this.connection.evalsha(hash, args.length, args);
             if(return_obj instanceof String){

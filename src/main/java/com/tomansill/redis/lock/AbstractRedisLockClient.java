@@ -6,8 +6,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -81,18 +79,10 @@ public abstract class AbstractRedisLockClient{
      */
     protected AbstractRedisLockClient() throws ExceptionInInitializerError{
 
-        // Create unique ID //TODO ID too long?
-        try{
-            byte[] digest = new byte[8];
-            SecureRandom sr = SecureRandom.getInstanceStrong();
-            sr.nextBytes(digest);
-            this.client_id = Utility.toHex(digest);
+        // Get random string
+        this.client_id = Utility.generateRandomString(8);
 
-            System.out.println("Client id: " + this.client_id);
-
-        }catch(NoSuchAlgorithmException nsae){
-            throw new ExceptionInInitializerError("Failed to initialize the client because SecureRandom does not have a suitable algorithm. Reason: " + nsae.getMessage());
-        }
+        System.out.println("Client id: " + this.client_id);
 
         // Initialize scripts - done only once
         if(SCRIPT_NAME_TO_SCRIPTS == null && SCRIPT_NAME_TO_SCRIPT_HASH == null){
@@ -323,7 +313,7 @@ public abstract class AbstractRedisLockClient{
      *  @return true if lock was acquired, false otherwise
      */
     boolean writeLock(final String lockpoint, final String lock_id, final boolean is_fair, final long time_out, final TimeUnit unit) throws InterruptedException{
-        boolean result = writeLock(lockpoint, lock_id, is_fair, time_out, TimeUnit.MILLISECONDS, getLeaseDuration(TimeUnit.MILLISECONDS));
+        boolean result = writeLock(lockpoint, lock_id, is_fair, time_out, unit, getLeaseDuration(unit));
         return result;
     }
 
@@ -438,7 +428,7 @@ public abstract class AbstractRedisLockClient{
 
             // Check event type
             if(event_type.equals("c")){ // Claimed event
-
+                // TODO
             }else if(event_type.equals("o")){ // Unlock event
 
                 //Extract client id

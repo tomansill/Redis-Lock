@@ -16,6 +16,8 @@ public class TestJedisLockClient {
     private static JedisPool[] pools = null;
     private static JedisLockClient[] clients = null;
 
+    private static final boolean DEBUG = false;
+
     @BeforeClass
     public static void setUp(){
 
@@ -40,23 +42,23 @@ public class TestJedisLockClient {
 
     @Test
     public void testMultipleWriteLockOnSingleInstance(){
-        System.out.println("Performing multiple write locks on single instance test...");
-        TestSingleInstance.testMultipleWriteLocks();
-        System.out.println("Single write locks test on single instance complete!");
+        if(DEBUG) System.out.println("Performing multiple write locks on single instance test...");
+        TestSingleInstance.testMultipleWriteLocks(DEBUG);
+        if(DEBUG) System.out.println("Single write locks test on single instance complete!");
     }
 
     @Test
     public void testMultipleWriteLockOnMultiInstance(){
-        System.out.println("Performing multiple write locks on multiple instances test...");
-        TestMultiInstance.testMultipleWriteLocks();
-        System.out.println("Multiple write locks test on multiple instances complete!");
+        if(DEBUG) System.out.println("Performing multiple write locks on multiple instances test...");
+        TestMultiInstance.testMultipleWriteLocks(DEBUG);
+        if(DEBUG) System.out.println("Multiple write locks test on multiple instances complete!");
     }
 
     @Test
     @Ignore("Test doesn't work properly")
     public void testMultipleWriteLocksFairLockOnSingleInstance(){
-        System.out.println("Performing multiple write locks ordering on single instance test...");
-        TestSingleInstance.testMultipleWriteLocksFairLock();
-        System.out.println("Single write locks test ordering on single instance complete!");
+        if(DEBUG) System.out.println("Performing multiple write locks ordering on single instance test...");
+        TestSingleInstance.testMultipleWriteLocksFairLock(DEBUG);
+        if(DEBUG) System.out.println("Single write locks test ordering on single instance complete!");
     }
 }

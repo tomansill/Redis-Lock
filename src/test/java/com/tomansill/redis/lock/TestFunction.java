@@ -13,11 +13,11 @@ public class TestFunction {
 
     private TestFunction(){} // Prevents instantiation
 
-    public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads) {
-        return performMultipleFairLock(rwl, num_threads, 0, null);
+    public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final boolean debug) {
+        return performMultipleFairLock(rwl, num_threads, 0, null, debug);
     }
 
-    public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final int max_time_out, final  TimeUnit unit) {
+    public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final int max_time_out, final  TimeUnit unit, final boolean debug) {
 
         // Initialize threads
         final Future<TimeResult>[] futures = new Future[num_threads];
@@ -33,9 +33,6 @@ public class TestFunction {
 
         // Create futures
         for (int i = 0; i < futures.length; i++) {
-
-            // Finalize the increment value
-            final int j = i;
 
             // Create future
             futures[i] = es.submit(() -> {
@@ -63,7 +60,7 @@ public class TestFunction {
                         if (lock != null && unit == null) lock.lock();
                         if (lock != null && unit != null){
                             if(!lock.tryLock(max_time_out, unit)){
-                                System.out.println("Timed out");
+                                if(debug) System.err.println("Timed out");
                                 cont.set(false);
                                 return new TimeResult(-1, -1);
                             }
@@ -80,7 +77,7 @@ public class TestFunction {
                     }
                 }catch(InterruptedException e){
                     cont.set(false);
-                    e.printStackTrace();
+                    if(debug) e.printStackTrace();
                 }finally {
                     // Unlock
                     if (lock != null) lock.unlock();
@@ -93,24 +90,24 @@ public class TestFunction {
         try {
 
             // Get result
-            for (int i = 0; i < futures.length; i++) {
-                TimeResult tr = futures[i].get();
-                System.out.println(tr.ranking + " " + tr.elapsed_time);
+            for (Future<TimeResult> future : futures) {
+                TimeResult tr = future.get();
+                if (debug) System.out.println(tr.ranking + " " + tr.elapsed_time);
             }
 
         }catch(ExecutionException | InterruptedException e){
-            e.printStackTrace();
+            if(debug) e.printStackTrace();
             return false;
         }
 
         return true;
     }
 
-    public static boolean performMultipleWriteLock(final ReadWriteLock rwl, final int num_threads) {
-        return performMultipleWriteLock(rwl, num_threads, 0, null);
+    public static boolean performMultipleWriteLock(final ReadWriteLock rwl, final int num_threads, final boolean debug) {
+        return performMultipleWriteLock(rwl, num_threads, 0, null, debug);
     }
 
-    public static boolean performMultipleWriteLock(final ReadWriteLock rwl, final int num_threads, final int max_time_out, final TimeUnit unit){
+    public static boolean performMultipleWriteLock(final ReadWriteLock rwl, final int num_threads, final int max_time_out, final TimeUnit unit, final boolean debug){
 
         // Initialize threads
         final Thread[] threads = new Thread[num_threads];
@@ -140,7 +137,7 @@ public class TestFunction {
                     if (lock != null && unit == null) lock.lock();
                     if (lock != null && unit != null){
                         if(!lock.tryLock(max_time_out, unit)){
-                            System.out.println("Timed out");
+                            if(debug) System.out.println("Timed out");
                             cont.set(false);
                             return;
                         }
@@ -168,7 +165,7 @@ public class TestFunction {
             try {
                 thread.join();
             }catch(InterruptedException e){
-                e.printStackTrace();
+                if(debug) e.printStackTrace();
                 return false;
             }
         }
