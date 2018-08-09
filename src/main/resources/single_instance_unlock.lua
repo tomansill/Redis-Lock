@@ -25,7 +25,7 @@ if is_read_lock == 1 then
 
     -- If the ownership count is zero, then lockpoint and lockcount should be deleted, resulting in unlocking it
     if(ownership_count ~= 0) then
-        return 1; -- true to exit the function early
+        return 0; -- exit the function early
     else
         redis.call("DEL", lockcount);
     end

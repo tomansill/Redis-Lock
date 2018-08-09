@@ -75,8 +75,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
             }
         }
 
-        //System.out.println("sha " + result);
-
+        System.out.println("sha " + result + " script:\n" + script);
 
         return result;
     }
@@ -90,21 +89,17 @@ public class JedisLockClient extends AbstractRedisLockClient {
      */
     @Override
     protected boolean booleanEval(final String hash, final String... args) {
-        //System.out.print("booleanEval(");
-        //for (String str : args){
-            //System.out.print(str + " ");
-        //}
-        //System.out.println();
-
         if(this.connection != null){
             Object return_obj = this.connection.evalsha(hash, args.length, args);
-            if(return_obj instanceof Boolean){
-                return (Boolean) return_obj;
+            if(return_obj == null) throw new RuntimeException("returned null with script: " + hash); //TODO
+            else if(return_obj instanceof Long){
+                long res = (Long) return_obj;
+                return res != 0;
             }else throw new RuntimeException(return_obj.getClass().getName()); //TODO
         }else{
             try(Jedis jedis = this.pool.getResource()){
                 Object return_obj = jedis.evalsha(hash, args.length, args);
-                if(return_obj == null) throw new RuntimeException("returned null"); //TODO
+                if(return_obj == null) throw new RuntimeException("returned null with script: " + hash); //TODO
                 else if(return_obj instanceof Long){
                     long res = (Long) return_obj;
                     return res != 0;

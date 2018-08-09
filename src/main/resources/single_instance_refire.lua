@@ -22,14 +22,37 @@ local lockwait_lease_time = KEYS[7]
 local is_read_lock = tonumber(KEYS[8])
 local lockcount = KEYS[9] .. "lockcount:" .. KEYS[1]
 local lockwait = KEYS[9] .. "lockwait:" .. KEYS[1]
-local lockpool = KEYS[9] .. "lockwait:" .. KEYS[1]
+local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
 
--- Check if lockwait has been expired (or has been quietly deleted) (this mitigates the herd effect)
-local expire = redis.call("PTTL", lockwait)
+-- Check if lockwait has been expired (or has been quietly deleted)
+-- this mitigates the herd effect)
+local expire = redis.call("PTTL", lockpoint)
 if expire == -2 then
+
+    -- Pop the lockwait
+    local popped = redis.call("LPOP", lockwait)
+
+    -- Check if shared lockpoint. If it is shared, remove the lockpool
+    if popped == "S" then redis.call("DEL", lockpool) end
 
     -- Extend the lockwait
     redis.call("PEXPIRE", lockwait_lease_time)
+
+    -- Declare this lockpoint dead (to prevent herd effect of this function) so it can get picked up by next lock
+    redis.call("SET", lockpoint, "dead")
+
+    -- Get the next client_lock
+    local element = redis.call("LINDEX", lockwait, 0)
+
+    -- If empty, either nobody is waiting on queue or there's unfair locks waiting for it
+    if(not element) then
+        element = "#"
+    else
+        element = "o:" .. element
+    end
+
+    -- Call it
+    redis.call("PUBLISH", "lockchannel", element)
 
 else
     return expire

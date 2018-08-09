@@ -28,6 +28,7 @@ public class TestJedisLockClient {
         // Initialize instances
         for(int i = 0; i < INSTANCE_NUMBER; i++){
             pools[i] = new JedisPool(new JedisPoolConfig(), TestSingleInstance.HOSTNAME, TestSingleInstance.PORT);
+            pools[i].getResource().ping();
             clients[i] = new JedisLockClient(pools[i]);
         }
 

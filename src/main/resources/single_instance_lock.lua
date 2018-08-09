@@ -22,7 +22,7 @@ local lockwait_lease_time = KEYS[7]
 local is_read_lock = tonumber(KEYS[8])
 local lockcount = KEYS[9] .. "lockcount:" .. KEYS[1]
 local lockwait = KEYS[9] .. "lockwait:" .. KEYS[1]
-local lockpool = KEYS[9] .. "lockwait:" .. KEYS[1]
+local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
 
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) then
@@ -30,27 +30,42 @@ if (first_attempt == 1) and (is_fair == 1) then
     -- Check if there's already locks waiting, if so, join them
     -- (Reason: so locks don't cut in the line thus enforcing fair locking policy)
     if (is_read_lock == 0) and (redis.call("LLEN", lockwait) ~= 0) then -- Writelock
+
+        -- Add into the wait list
         redis.call("RPUSH", lockwait, client_lock_id)
-        redis.call("PEXPIRE", lockwait, lockwait_lease_time) -- extend the expiration time
+
+        -- extend the expiration time
+        redis.call("PEXPIRE", lockwait, lockwait_lease_time)
 
         return lockwait_lease_time
 
     elseif (redis.call("SCARD", lockpool) ~= 0) then -- Readlock
+
+        -- Add into the wait pool
         redis.call("SADD", lockpool, client_lock_id)
-        redis.call("PEXPIRE", lockpool, lockwait_lease_time)  -- extend the expiration time
+
+        -- extend the expiration time
+        redis.call("PEXPIRE", lockpool, lockwait_lease_time)
 
         return lockwait_lease_time
     end
 
 end
 
--- Notify others that the lock has been picked up -- TODO
-if first_attempt == 0 then
-    redis.call("PUBLISH", "lockchannel", "c:" .. client_lock_id)
-end
-
 -- Lock it
-if redis.call("SET", lockpoint, "unique", "NX", "PX", lock_lease_time) then -- Lock success
+local result = redis.call("GET", lockpoint)
+if (result == nil) or (result == "dead") then -- Cleared to lock
+
+    -- Switch on shared or read lock
+    if (is_read_lock == 1) then -- Read lock
+        redis.call("SET", lockpoint, "open", "PX", lock_lease_time)
+        redis.call("SET", lockcount, "1")
+        redis.call("DEL", lockpool); -- Remove the waiting pool so readlocks can go ahead and lock
+        redis.call("PUBLISH", "lockchannel", "s:" .. client_lock_id) -- 's' event indicates shared lockpoint
+
+    else -- Read lock
+        redis.call("SET", lockpoint, "unique", "PX", lock_lease_time)
+    end
 
     -- If this is not first attempt, then the lockwait needs to be popped
     if (first_attempt == 0) and (is_fair == 1) then
@@ -60,13 +75,8 @@ if redis.call("SET", lockpoint, "unique", "NX", "PX", lock_lease_time) then -- L
         end
     end
 
-    -- If shared, then lock needs to be downgraded from writelock to readlock and open the readlock
-    if (is_read_lock == 1) then
-        redis.call("SET", lockpoint, "open") -- TODO can this go to the original SET call?
-        redis.call("SET", lockcount, "1")
-        redis.call("DEL", lockpool); -- Remove the waiting pool so readlocks can go ahead and lock
-        redis.call("PUBLISH", "lockchannel", "s:" .. client_lock_id) -- 's' event indicates shared lock
-    end
+    -- Publish lock lifetime
+    redis.call("PUBLISH", "lockchannel", "l:" .. client_lock_id .. ":" .. lock_lease_time)
 
     return 0 -- 0 means success
 
@@ -76,10 +86,17 @@ else -- Lock failed
     if is_read_lock == 1 then -- Readlocks
 
         -- Check if lock is open for sharing
-        if redis.call("GET", lockpoint) == "open" then -- the lockpoint is open for sharing
+        -- If readlock is not fair, disregard "closed" state and lock anyways
+        if (result == "open") or (is_fair == 0 and result == "closed") then -- the lockpoint is open for sharing
 
             -- Increment the ownership
             redis.call("INCR", lockpoint)
+
+            -- Extend the lockpoint
+            redis.call("PEXPIRE", lockpoint, lock_lease_time)
+
+            -- Publish lock lifetime
+            redis.call("PUBLISH", "lockchannel", "l:" .. client_lock_id .. ":" .. lock_lease_time)
 
             -- Success
             return 0 -- 0 means success

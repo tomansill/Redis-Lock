@@ -3,7 +3,7 @@ package com.tomansill.redis.lock;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.junit.Assume.assumeTrue;
 
 public class TestMultiInstance{
@@ -16,15 +16,16 @@ public class TestMultiInstance{
 
     public static void setUp(AbstractRedisLockClient[] in_clients){
 
-        assertTrue("in_clients is null!", in_clients != null);
+        assertNotNull("in_clients is null!", in_clients);
 
         for(int i = 0; i < in_clients.length; i++){
-            assertTrue("Client #" + i + " is null!", in_clients[i] != null);
+            assertNotNull("Client #" + i + " is null!", in_clients[i]);
         }
 
         clients = in_clients;
     }
 
+    @SuppressWarnings("unchecked")
     public static void testMultipleWriteLocks(final boolean debug){
 
         // Check database connection
@@ -40,7 +41,7 @@ public class TestMultiInstance{
         ExecutorService es = Executors.newCachedThreadPool();
 
         // Create threads
-        Future[] futures = new Future[clients.length];
+        Future<Boolean>[] futures = new Future[clients.length];
 
         // Finalize clients
         final AbstractRedisLockClient[] f_clients = clients;
@@ -55,7 +56,7 @@ public class TestMultiInstance{
             try {
                 assertTrue("The control test number one has failed, the test is flawed.", !future.get());
             }catch(InterruptedException | ExecutionException e){
-                assertTrue("InterruptedException was thrown. Reason: " + e.getMessage(), false);
+                fail("InterruptedException was thrown. Reason: " + e.getMessage());
             }
         }
 
@@ -67,9 +68,9 @@ public class TestMultiInstance{
         // Do control test 2
         for(Future<Boolean> future : futures){
             try {
-                assertTrue("The control test number two has failed, the test is flawed.", future.get().booleanValue());
+                assertTrue("The control test number two has failed, the test is flawed.", future.get());
             }catch(InterruptedException | ExecutionException e){
-                assertTrue("InterruptedException was thrown. Reason: " + e.getMessage(), false);
+                fail("InterruptedException was thrown. Reason: " + e.getMessage());
             }
         }
 
@@ -83,9 +84,9 @@ public class TestMultiInstance{
         // Do experiment test with unfair locking
         for(Future<Boolean> future : futures){
             try {
-                assertTrue("The unfair experiment test has failed.", future.get().booleanValue());
+                assertTrue("The unfair experiment test has failed.", future.get());
             }catch(InterruptedException | ExecutionException e){
-                assertTrue("InterruptedException was thrown. Reason: " + e.getMessage(), false);
+                fail("InterruptedException was thrown. Reason: " + e.getMessage());
             }
         }
 
@@ -99,9 +100,9 @@ public class TestMultiInstance{
         // Do experiment test with fair locking
         for(Future<Boolean> future : futures){
             try {
-                assertTrue("The fair experiment test has failed.", future.get().booleanValue());
+                assertTrue("The fair experiment test has failed.", future.get());
             }catch(InterruptedException | ExecutionException e){
-                assertTrue("InterruptedException was thrown. Reason: " + e.getMessage(), false);
+                fail("InterruptedException was thrown. Reason: " + e.getMessage());
             }
         }
     }

@@ -3,6 +3,7 @@ package com.tomansill.redis.lock;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -16,7 +17,7 @@ public class TestSingleInstance {
 
     public static void setUp(AbstractRedisLockClient in_client){
 
-        assertTrue("in_client is null!", in_client != null);
+        assertNotNull("in_client is null!", in_client);
 
         client = in_client;
     }
