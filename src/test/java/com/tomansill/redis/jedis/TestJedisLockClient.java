@@ -9,6 +9,7 @@ import org.junit.Test;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+@Ignore
 public class TestJedisLockClient {
 
     private final static int INSTANCE_NUMBER = 3;

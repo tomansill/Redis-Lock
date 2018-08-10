@@ -9,6 +9,7 @@
 -- KEYS[7] lockwait_lease - lockwait lease in milliseconds
 -- KEYS[8] is_read - true if lock is a readlock, false if it is a writelock
 -- KEYS[9] prefix - prefix for lock namespaces
+-- KEYS[10] trylock - true if the lock will not go in waitlist, false so it will enqueue in waitlist
 
 -- Initialization
 local lockpoint = KEYS[9] .. "lockpoint:" .. KEYS[1]
@@ -23,6 +24,7 @@ local is_read_lock = tonumber(KEYS[8])
 local lockcount = KEYS[9] .. "lockcount:" .. KEYS[1]
 local lockwait = KEYS[9] .. "lockwait:" .. KEYS[1]
 local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
+local trylock = tonumber(KEYS[10])
 
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) then
@@ -37,9 +39,9 @@ if (first_attempt == 1) and (is_fair == 1) then
         -- extend the expiration time
         redis.call("PEXPIRE", lockwait, lockwait_lease_time)
 
-        return lockwait_lease_time
+        return redis.call("PTTL", lockpoint) -- TODO catch -2 or -1
 
-    elseif (redis.call("SCARD", lockpool) ~= 0) then -- Readlock
+    elseif (is_read_lock == 1) and (redis.call("SCARD", lockpool) ~= 0) then -- Readlock
 
         -- Add into the wait pool
         redis.call("SADD", lockpool, client_lock_id)
@@ -47,14 +49,17 @@ if (first_attempt == 1) and (is_fair == 1) then
         -- extend the expiration time
         redis.call("PEXPIRE", lockpool, lockwait_lease_time)
 
-        return lockwait_lease_time
+        return redis.call("PTTL", lockpoint) -- TODO catch -2 or -1
+
+    elseif (trylock == 1) then
+        return -1
     end
 
 end
 
 -- Lock it
 local result = redis.call("GET", lockpoint)
-if (result == nil) or (result == "dead") then -- Cleared to lock
+if (not result) or (result == "dead") then -- Cleared to lock
 
     -- Switch on shared or read lock
     if (is_read_lock == 1) then -- Read lock
@@ -81,6 +86,9 @@ if (result == nil) or (result == "dead") then -- Cleared to lock
     return 0 -- 0 means success
 
 else -- Lock failed
+
+    -- If trylock, return immediately
+    if trylock == 1 then return -1 end
 
     -- Switch on write or read locks
     if is_read_lock == 1 then -- Readlocks
@@ -129,7 +137,6 @@ else -- Lock failed
 
         -- Get expiration time
         local expire = redis.call("PTTL", lockpoint);
-        if expire <= 0 then expire = -1 end
 
         return expire
     end
