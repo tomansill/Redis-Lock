@@ -98,7 +98,7 @@ else -- Lock failed
         if (result == "open") or (is_fair == 0 and result == "closed") then -- the lockpoint is open for sharing
 
             -- Increment the ownership
-            redis.call("INCR", lockpoint)
+            redis.call("INCR", lockcount)
 
             -- Extend the lockpoint
             redis.call("PEXPIRE", lockpoint, lock_lease_time)

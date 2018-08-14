@@ -108,18 +108,18 @@ public class TestScripts{
 
     @After
     public void tearDown() throws InterruptedException {
-        pubsub.unsubscribe("lockchannel");
-        pubsub.unsubscribe();
-        pubsub_close_controller.await();
-        pubsub_listener.close();
-        pool.close();
+        //if(pubsub != null) pubsub.unsubscribe("lockchannel");
+        if(pubsub != null) pubsub.unsubscribe();
+        if(pubsub_close_controller != null) pubsub_close_controller.await();
+        if(pubsub_listener != null) pubsub_listener.close();
+        if(pool != null) pool.close();
     }
 
-    @Test
+    @Test // Maven Junit will attempt to fork tests but it will be messed up in multipe threads, enforce single threading
     public void test() throws InterruptedException{
 	    this.testSingleInstanceLockScriptUnfairWriteLock();
 	    this.testSingleInstanceLockScriptFairWriteLock();
-	    this.testSingleInstanceLockScriptUnfairWriteLock();
+	    this.testSingleInstanceLockScriptFairReadLock();
 	    this.testSingleInstanceLockScriptUnfairReadLock();
     }
 
@@ -157,6 +157,24 @@ public class TestScripts{
                 // Check pubsub
                 assertEquals("PUBSUB is not empty! Value:" + PUBSUB, 0, PUBSUB.size());
 
+                // Check values that should not exist
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+	            assertFalse("lockcount should not exist", jedis.exists("lockcount:" + key));
+
+	            // Do unfair lock that should fail
+	            ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+	            assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+	            // Check stuff that should not exist
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+	            assertFalse("lockcount should not exist", jedis.exists("lockcount:" + key));
+
+	            // Check pubsub
+	            assertEquals("PUBSUB is not empty! Value:" + PUBSUB, 0, PUBSUB.size());
             }finally{
                 jedis.del("lockpoint:" + key);
                 PUBSUB.clear();
@@ -311,7 +329,7 @@ public class TestScripts{
 	            assertEquals("Return value is not zero!", ((Long)ret_val).longValue(), 0);
 	            cdl.await(10, TimeUnit.MILLISECONDS);
 	            assertEquals("Value from Pubsub is messed up", "s:client1:one", PUBSUB.poll());
-	            assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT, PUBSUB.poll(10, TimeUnit.MILLISECONDS));
+	            assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT, PUBSUB.poll(50, TimeUnit.MILLISECONDS));
 
 	            // Check lockpoint expiration date
 	            assertEquals("TTL on lockpoint is not what expected", VERY_LONG_TIMEOUT - 5, jedis.pttl("lockpoint:" + key), 5);
@@ -319,6 +337,84 @@ public class TestScripts{
 	            // Check value
 	            assertEquals("Lockpoint value is not what expected", "open", jedis.get("lockpoint:" + key));
 	            assertEquals("Lockcount value is not what expected", "1", jedis.get("lockcount:" + key));
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Do unfair read lock - it should succeed
+	            cdl = new CountDownLatch(1);
+	            ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "1", "", "0");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value is not zero!", ((Long)ret_val).longValue(), 0);
+	            cdl.await(10, TimeUnit.MILLISECONDS);
+	            assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
+	            assertEquals("Value from Pubsub is messed up", "l:client1:two:" + VERY_LONG_TIMEOUT, PUBSUB.poll());
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "2", jedis.get("lockcount:" + key));
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Do unfair write lock that should fail
+	            ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+	            assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "2", jedis.get("lockcount:" + key));
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Do fair write lock that should fail
+	            ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+	            assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "2", jedis.get("lockcount:" + key));
+	            assertTrue("lockwait should exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Manually change lockpoint to closed and check value
+	            jedis.set("lockpoint:" + key, "closed");
+	            jedis.del("lockwait:" + key);
+
+	            // Do unfair readlock - it should succeed
+	            cdl = new CountDownLatch(1);
+	            ret_val = jedis.evalsha(script_hash, 10, key, "client1", "three", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "1", "", "0");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value is not zero!", ((Long)ret_val).longValue(), 0);
+	            cdl.await(10, TimeUnit.MILLISECONDS);
+	            assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
+	            assertEquals("Value from Pubsub is messed up", "l:client1:three:" + VERY_LONG_TIMEOUT, PUBSUB.poll());
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "3", jedis.get("lockcount:" + key));
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Do unfair write lock that should fail
+	            ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+	            assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "3", jedis.get("lockcount:" + key));
+	            assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+	            // Do fair write lock that should fail
+	            ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+	            assertTrue("Return value is not an integer!", ret_val instanceof Long);
+	            assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+	            assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+	            // Check lockcount
+	            assertEquals("Lockcount value is not what expected", "3", jedis.get("lockcount:" + key));
+	            assertTrue("lockwait should exist", jedis.exists("lockwait:" + key));
+	            assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
             }finally{
                 jedis.del("lockpoint:" + key);
@@ -330,7 +426,7 @@ public class TestScripts{
         }
     }
 
-	private void testSingleInstanceLockScriptFairReadLock(){
+	private void testSingleInstanceLockScriptFairReadLock() throws InterruptedException{
 
 		// Check if script is available
 		assertTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
@@ -341,7 +437,66 @@ public class TestScripts{
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
 			try{
+				// Load the script
+				String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
+				// Do a simple successful fair lock that should always succeed
+				cdl = new CountDownLatch(1);
+				Object ret_val = jedis.evalsha(script_hash, 10, key, "client1", "one", "1", "0", VERY_LONG_TIMEOUT+"", VERY_LONG_TIMEOUT+"", "1", "", "0");
+				assertTrue("Return value is not an integer! value: " + ret_val, ret_val instanceof Long);
+				assertEquals("Return value is not zero!", 0, ((Long)ret_val).longValue());
+				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Value from Pubsub is messed up", "s:client1:one", PUBSUB.poll());
+				assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT, PUBSUB.poll(50, TimeUnit.MILLISECONDS));
+
+				// Check lockpoint expiration date
+				assertEquals("TTL on lockpoint is not what expected", VERY_LONG_TIMEOUT - 5, jedis.pttl("lockpoint:" + key), 5);
+
+				// Check value
+				assertEquals("Lockpoint value is not what expected", "open", jedis.get("lockpoint:" + key));
+				assertEquals("Lockcount value is not what expected", "1", jedis.get("lockcount:" + key));
+
+				// Check values that shouldnt exist
+				assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+				// Do an unfair write lock that should fail
+				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+				assertTrue("Return value is not an integer!", ret_val instanceof Long);
+				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+				// Check lockcount
+				assertEquals("Lockcount value is not what expected", "1", jedis.get("lockcount:" + key));
+				assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+				// Do a fair write lock that should fail
+				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "0", "");
+				assertTrue("Return value is not an integer!", ret_val instanceof Long);
+				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - 5, (Long) ret_val, 5);
+				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
+
+				// Check lockcount
+				assertEquals("Lockcount value is not what expected", "1", jedis.get("lockcount:" + key));
+				assertTrue("lockwait should exist", jedis.exists("lockwait:" + key));
+				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
+
+				// Clean up
+				jedis.del("lockwait:" + key);
+
+				// Do fair readlock - it should succeed
+				cdl = new CountDownLatch(1);
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT+"", (VERY_LONG_TIMEOUT*2)+"", "1", "", "0");
+				assertTrue("Return value is not an integer!", ret_val instanceof Long);
+				assertEquals("Return value is not zero!", ((Long)ret_val).longValue(), 0);
+				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
+				assertEquals("Value from Pubsub is messed up", "l:client1:four:" + VERY_LONG_TIMEOUT, PUBSUB.poll());
+
+				assertEquals("Lockcount value is not what expected", "2", jedis.get("lockcount:" + key));
+				assertFalse("lockwait should not exist", jedis.exists("lockwait:" + key));
+				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 			}finally{
 				jedis.del("lockpoint:" + key);
