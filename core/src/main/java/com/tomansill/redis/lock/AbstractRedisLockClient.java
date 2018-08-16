@@ -211,12 +211,12 @@ public abstract class AbstractRedisLockClient{
      *  @param channel channel name
      *  @param function function to fire when new topic comes up
      */
-    protected abstract void subscribe(final String channel, final Consumer<String> function);
+    public abstract void subscribe(final String channel, final Consumer<String> function);
 
     /** Unsunscribes channel
      *  @param channel channel name
      */
-    protected abstract void unsubscribe(final String channel);
+    public abstract void unsubscribe(final String channel);
 
     private CountDownLatch setUpSubscription(final String lockpoint, final String lock_id, final boolean is_fair, final boolean first_time){
 
@@ -432,28 +432,40 @@ public abstract class AbstractRedisLockClient{
 
     private void processMessage(final String message){
 
+    	Message notification_message = Message.interpret(message);
+
+    	if(notification_message == null) return;
+
+    	if(notification_message.type == Message.Type.FREE){
+
+		    // "Randomly" choose an element
+		    String random_lock_id = null;
+		    synchronized(this.unfair_locks_set_map) {
+			    if(this.unfair_locks_set_map.get(notification_message.lockpoint).iterator().hasNext()) {
+				    random_lock_id = this.unfair_locks_set_map.get(notification_message.lockpoint).iterator().next();
+			    }
+		    }
+
+		    // Check if the lock actually exists
+		    if(random_lock_id == null) return;
+
+		    // Find CDL if there's any and fire it
+		    CountDownLatch cdl = this.lock_to_cdl_map.get(random_lock_id);
+		    if(cdl != null) cdl.countDown();
+		    else {
+			    // TODO run refire function
+			    System.err.println("panic 2");
+		    }
+	    }else if(notification_message.type == Message.Type.SHARED){
+
+	    }else if(notification_message.type == Message.Type.UNLOCK){
+
+	    }else if(notification_message.type == Message.Type.LOCK){
+
+	    }
+	    /*
         // Check if it's unfair unlock message
         if(message.charAt(0) == '#') { // Unfair
-
-            // "Randomly" choose an element
-            String lock_id = null;
-            String lockpoint = message.substring(1);
-            synchronized(this.unfair_locks_set_map) {
-                if(this.unfair_locks_set_map.get(lockpoint).iterator().hasNext()) {
-                    lock_id = this.unfair_locks_set_map.get(lockpoint).iterator().next();
-                }
-            }
-
-            // Check if the lock actually exists
-            if(lock_id == null) return;
-
-            // Find CDL if there's any and fire it
-            CountDownLatch cdl = this.lock_to_cdl_map.get(lock_id);
-            if(cdl != null) cdl.countDown();
-            else {
-                // TODO run refire function
-                System.err.println("panic 2");
-            }
 
         } else { // Possibly fair
 
@@ -493,6 +505,7 @@ public abstract class AbstractRedisLockClient{
                 else this.refire(message.substring(lockpoint_index + 1));
             }
         }
+        */
     }
 
     private void setRefireTimer(final String lockpoint, long duration){
@@ -538,74 +551,5 @@ public abstract class AbstractRedisLockClient{
 
     	// Else, wait for that duration
 	    else setRefireTimer(lockpoint, duration);
-    }
-
-    private static class Message{
-
-    	/** enum **/
-	    private enum Type{
-    		LOCK,
-		    UNLOCK,
-		    SHARED,
-		    OPEN,
-		    FREE
-	    }
-
-	    public final Type type;
-
-	    public final String client_id;
-
-	    public final String lock_id;
-
-	    public final String lockpoint;
-
-	    public final long lease_time;
-
-	    public Message(final Type type, final String client_id, final String lock_id, final String lockpoint, final long lease_time){
-	    	this.type = type;
-	    	this.client_id = client_id;
-	    	this.lock_id = lock_id;
-	    	this.lockpoint = lockpoint;
-	    	this.lease_time = lease_time;
-	    }
-
-	    public static Message interpret(final String message){
-	    	if(message == null || message.isEmpty()) return null;
-
-	    	try{
-			    // Get type
-			    Type type;
-			    if(message.charAt(0) == 'l') type = Type.LOCK;
-			    else if(message.charAt(0) == 'u') type = Type.UNLOCK;
-			    else if(message.charAt(0) == 's') type = Type.SHARED;
-			    else if(message.charAt(0) == 'o') type = Type.OPEN;
-			    else if(message.charAt(0) == '#') type = Type.FREE;
-			    else return null;
-
-			    // Check the semicolon after type
-			    if(message.charAt(1) != ':') return null;
-
-			    // If Free or Shared message, then scan all and return message
-			    if(type == Type.FREE || type == Type.SHARED){
-				    return new Message(type, null, null, message.substring(3), 0);
-			    }
-
-			    // Get first semicolon
-			    int first_semi = message.indexOf(":", 2);
-
-			    // Client id
-			    String client_id = message.substring(3, first_semi);
-
-			    // Get second semicolon
-			    int second_semi = message.indexOf(":", first_semi + 1);
-
-			    // lock id
-			    String lock_id = message.substring(first_semi + 1, second_semi);
-
-			    return null;
-		    }catch(IndexOutOfBoundsException ignored){
-	    		return null;
-		    }
-	    }
     }
 }

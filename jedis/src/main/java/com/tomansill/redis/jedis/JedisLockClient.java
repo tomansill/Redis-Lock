@@ -238,7 +238,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @param function function to fire when new topic comes up
      */
     @Override
-    protected void subscribe(final String channel, final Consumer<String> function){
+    public void subscribe(final String channel, final Consumer<String> function){
 		this.pubsub_manager.subscribe(channel, function);
     }
 
@@ -246,7 +246,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @param channel channel name
      */
     @Override
-    protected void unsubscribe(final String channel){
+    public void unsubscribe(final String channel){
 	    this.pubsub_manager.unsubscribe(channel);
     }
 }
