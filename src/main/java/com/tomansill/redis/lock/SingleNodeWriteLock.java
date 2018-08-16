@@ -93,8 +93,8 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
         if(this.is_locked) return;
 
         // Lock it
-        if(unit == null) this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, null);
-        else this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), -1, unit, lease_time);
+        if(unit == null) this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, false, this.rrwl.isFair(), -1, null);
+        else this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, false, this.rrwl.isFair(), -1, unit, lease_time);
     }
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
@@ -173,8 +173,8 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
         if(this.is_locked) return true;
 
         // Lock it
-        if(unit == null) return (this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, null));
-        else return (this.is_locked = this.rrwl.getClient().writeLock(this.rrwl.getLockpoint(), this.id + "", this.rrwl.isFair(), wait_time, unit, lease_time));
+        if(unit == null) return (this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, true, this.rrwl.isFair(), wait_time, null));
+        else return (this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, true, this.rrwl.isFair(), wait_time, unit, lease_time));
     }
 
     /** Returns a new Condition instance that is bound to this Lock instance.

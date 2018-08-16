@@ -126,4 +126,9 @@ public class Utility{
         // Convert to hex and return it
         return Utility.toHex(generateRandomArray((length/2) + (length % 2))).substring(0, length);
     }
+
+    public static <T> T checkValueForNull(final T value, final String variable_name){
+    	if(value == null) throw new IllegalArgumentException(variable_name + " is null");
+    	return value;
+    }
 }

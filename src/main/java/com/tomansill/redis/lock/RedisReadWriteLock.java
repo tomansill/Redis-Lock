@@ -85,7 +85,7 @@ public class RedisReadWriteLock implements ReadWriteLock{
     /** Returns the lock used for writing
      *  @return the lock used for writing
      *  @throws UnsupportedOperationException thrown if AbstractRedisLockClient associated to the instance does not support write locks
-     *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/ReadWriteLock.html#writeLock--">ReadWriteLock.writeLock()</a>
+     *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/ReadWriteLock.html#writeLock--">ReadWriteLock.performLock()</a>
      */
     public AutoCloseableRedisLock writeLock(){
 

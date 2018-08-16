@@ -11,13 +11,16 @@ local is_read_lock = tonumber(KEYS[2])
 local lockcount = KEYS[3] .. "lockcount:" .. KEYS[1]
 local lockwait = KEYS[3] .. "lockwait:" .. KEYS[1]
 local is_owner = tonumber(KEYS[4])
+local lockchannel = KEYS[3] .. "channel:" .. KEYS[1]
 
 -- Check if readlock
 if is_read_lock == 1 then
 
     -- If lock owner, close the lockpoint
     if is_owner == 1 then
+        local ttl = redis.call("PTTL", lockpoint);
         redis.call("SET", lockpoint, "closed");
+        redis.call("PEXPIRE", lockpoint, ttl)
     end
 
     -- Decrement the lockcount
@@ -34,18 +37,22 @@ end
 -- Delete key and publish that lock has been released
 redis.call("DEL", lockpoint)
 
--- Get from lockwait
+-- Get from lockwait (no pop)
 local element = redis.call("LINDEX", lockwait, 0)
 
 -- If empty, either nobody is waiting on queue or there's unfair locks waiting for it
 if(not element) then
-    element = "#"
+    element = "#" .. ":" .. KEYS[1]
 else
-    element = "o:" .. element
+    if(element == 's') then
+        element = "s:" .. KEYS[1]
+    else
+        element = "u:" .. element .. ":" .. KEYS[1]
+    end
 end
 
 -- Call it
-redis.call("PUBLISH", "lockchannel", element)
+redis.call("PUBLISH", lockchannel, element)
 
 -- Return true
 return 1
