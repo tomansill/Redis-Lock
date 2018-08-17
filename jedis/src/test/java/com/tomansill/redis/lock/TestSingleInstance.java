@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import com.tomansill.redis.test.util.TestFunction;
+
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -31,16 +33,16 @@ public class TestSingleInstance {
         int num_threads = 20;
 
         // Do control test
-        assertTrue("The control test number one has failed, the test is flawed.", !TestFunction.performMultipleWriteLock(null, num_threads, debug));
+        assertTrue("The control test number one has failed, the test is flawed.", !com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(null, num_threads, debug));
 
         // Do control test
-        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleWriteLock(new ReentrantReadWriteLock(), num_threads, debug));
+        assertTrue("The control test number two has failed, the test is flawed.", com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(new ReentrantReadWriteLock(), num_threads, debug));
 
         // Do experiment test with unfair locking
-        assertTrue("The unfair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), false), num_threads, 5, TimeUnit.SECONDS, debug));
+        assertTrue("The unfair experiment test has failed.", com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), false), num_threads, 5, TimeUnit.SECONDS, debug));
 
         // Do experiment test with fair locking
-        assertTrue("The fair experiment test has failed.", TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS, debug));
+        assertTrue("The fair experiment test has failed.", com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS, debug));
 
     }
 
@@ -53,7 +55,7 @@ public class TestSingleInstance {
         int num_threads = 20;
 
         // Do control test
-        assertTrue("The control test number two has failed, the test is flawed.", TestFunction.performMultipleFairLock(new ReentrantReadWriteLock(true), num_threads, debug));
+        assertTrue("The control test number two has failed, the test is flawed.", com.tomansill.redis.test.util.TestFunction.performMultipleFairLock(new ReentrantReadWriteLock(true), num_threads, debug));
 
         // Do experiment test with fair locking
         assertTrue("The fair experiment test has failed.", TestFunction.performMultipleFairLock(client.getLock(Utility.generateRandomString(8), true), num_threads, 5, TimeUnit.SECONDS, debug));

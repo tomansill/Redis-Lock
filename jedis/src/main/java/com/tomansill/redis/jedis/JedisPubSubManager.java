@@ -18,7 +18,7 @@ public class JedisPubSubManager{
 		this.connection = jedis;
 	}
 
-	public void subscribe(final String channel, final Consumer<String> function){
+	public synchronized void subscribe(final String channel, final Consumer<String> function){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
@@ -49,7 +49,7 @@ public class JedisPubSubManager{
 		}
 	}
 
-	public void unsubscribe(final String channel){
+	public synchronized void unsubscribe(final String channel){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
@@ -66,10 +66,15 @@ public class JedisPubSubManager{
 		}
 	}
 
+	public synchronized void unsubscribeAll(){
+		for(String channel : this.channel_function_map.keySet()){
+			this.unsubscribe(channel);
+		}
+	}
+
 	private class CustomPubSub extends JedisPubSub{
 		@Override
 		public void onMessage(final String channel, final String message){
-			System.out.println(channel + " " + message);
 
 			// If null, ignore
 			if(channel == null) return;

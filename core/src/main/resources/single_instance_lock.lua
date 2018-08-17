@@ -25,7 +25,7 @@ local lockcount = KEYS[9] .. "lockcount:" .. KEYS[1]
 local lockwait = KEYS[9] .. "lockwait:" .. KEYS[1]
 local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
 local trylock = tonumber(KEYS[10])
-local lockchannel = KEYS[9] .. "channel:" .. KEYS[1]
+local lockchannel = KEYS[9] .. "lockchannel:" .. KEYS[1]
 
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) then
@@ -65,7 +65,7 @@ if (not result) or (result == "dead") then -- Cleared to lock
     -- Switch on shared or read lock
     if (is_read_lock == 1) then -- Read lock
         redis.call("SET", lockpoint, "open", "PX", lock_lease_time)
-        redis.call("SET", lockcount, "1")
+        redis.call("SET", lockcount, "1", "PX", lock_lease_time)
         redis.call("DEL", lockpool); -- Remove the waiting pool so readlocks can go ahead and lock
         redis.call("PUBLISH", lockchannel, "o:" .. KEYS[1]) -- 'o' event indicates open lockpoint
 
@@ -119,6 +119,7 @@ else -- Lock failed
 
             -- Add in the pool
             redis.call("SADD", lockpool, client_lock_id)
+            redis.call("PEXPIRE", lockwait, lockwait_lease_time)  -- extend the expiration time
             redis.call("PEXPIRE", lockpool, lockwait_lease_time)  -- extend the expiration time
 
             -- Get expiration time

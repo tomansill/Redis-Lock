@@ -16,9 +16,6 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
 
     <packaging>jar</packaging>
 
-    <properties>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>redis.clients</groupId>
@@ -32,6 +29,12 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
             <artifactId>redis-lock-core</artifactId>
             <version>0.0.0</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tomansill.redis.lock</groupId>
+            <artifactId>redis-lock-test-util</artifactId>
+            <version>0.0.0</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

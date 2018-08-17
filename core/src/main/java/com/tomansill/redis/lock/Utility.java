@@ -3,7 +3,6 @@ package com.tomansill.redis.lock;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Random;
-import java.util.concurrent.*;
 
 /** Sensitive data object, used for testing concurrency mechanisms
  *  @author <a href="mailto:tom@ansill.com">Tom Ansill</a>
@@ -50,6 +49,7 @@ public class Utility{
             }
         }
 
+        /*
         // SecureRandom may break by "blocking" even though it has been created successfully. We test it by
         // launching future and wait for it to succeed
         if(RANDOM_SOURCE instanceof SecureRandom) {
@@ -86,6 +86,7 @@ public class Utility{
                 throw new RuntimeException(e);
             }
         }
+        */
 
         // Get array of random bytes
         byte[] random_array = new byte[length];

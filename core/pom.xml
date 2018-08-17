@@ -23,5 +23,11 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
             <version>${jedis_version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.tomansill.redis.lock</groupId>
+            <artifactId>redis-lock-test-util</artifactId>
+            <version>0.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

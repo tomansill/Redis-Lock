@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import com.tomansill.redis.test.util.TestFunction;
+
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -48,7 +50,7 @@ public class TestMultiInstance{
 
         // Iterate threads to build threads for control test number one
         for(int i = 0; i < f_clients.length; i++){
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(null, num_threads, debug));
+            futures[i] = es.submit(() -> com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(null, num_threads, debug));
         }
 
         // Do control test 1
@@ -62,7 +64,7 @@ public class TestMultiInstance{
 
         // Iterate threads to build threads for control test number one
         for(int i = 0; i < f_clients.length; i++){
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(rrwl, num_threads, debug));
+            futures[i] = es.submit(() -> com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(rrwl, num_threads, debug));
         }
 
         // Do control test 2
@@ -78,7 +80,7 @@ public class TestMultiInstance{
         final String lockpoint1 = Utility.generateRandomString(8);
         for(int i = 0; i < f_clients.length; i++){
             final int index = i;
-            futures[i] = es.submit(() -> TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint1), num_threads, 5, TimeUnit.SECONDS, debug));
+            futures[i] = es.submit(() -> com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(f_clients[index].getLock(lockpoint1), num_threads, 5, TimeUnit.SECONDS, debug));
         }
 
         // Do experiment test with unfair locking

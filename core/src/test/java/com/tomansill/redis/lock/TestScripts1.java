@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -25,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 
 @Ignore
-public class TestScripts{
+public class TestScripts1{
 
 	private static final String HOSTNAME = "localhost";
 
@@ -61,7 +62,7 @@ public class TestScripts{
 		for(String filename : FILENAMES){
 
 			// Get file
-			File file = new File(class_loader.getResource(filename + ".lua").getFile());
+			File file = new File(Objects.requireNonNull(class_loader.getResource(filename + ".lua")).getFile());
 
 			// Serious error occurs if those files cannot be found
 			if(!file.exists()){
@@ -115,7 +116,6 @@ public class TestScripts{
 
 	@After
 	public void tearDown() throws InterruptedException{
-		//if(pubsub != null) pubsub.unsubscribe("lockchannel");
 		if(pubsub != null) pubsub.unsubscribe();
 		if(pubsub_close_controller != null) pubsub_close_controller.await();
 		if(pubsub_listener != null) pubsub_listener.close();
@@ -130,6 +130,7 @@ public class TestScripts{
 		this.testSingleInstanceLockScriptFairReadLock();
 		this.testSingleInstanceLockScriptUnfairReadLock();
 		this.testSingleInstanceUnlockScript();
+		this.testSingleInstanceRefireScript();
 	}
 
 	private void testSingleInstanceLockScriptUnfairWriteLock() throws InterruptedException{
@@ -668,7 +669,7 @@ public class TestScripts{
 		}
 	}
 
-	private void testSingleInstanceRefirecript() throws InterruptedException{
+	private void testSingleInstanceRefireScript() throws InterruptedException{
 
 		// Check if script is available
 		assertTrue("Script name 'single_instance_refire' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_refire"));

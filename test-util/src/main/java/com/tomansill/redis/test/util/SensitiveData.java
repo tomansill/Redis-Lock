@@ -1,4 +1,4 @@
-package com.tomansill.redis.lock;
+package com.tomansill.redis.test.util;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
