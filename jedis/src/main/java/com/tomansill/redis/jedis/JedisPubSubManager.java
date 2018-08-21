@@ -4,6 +4,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPubSub;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 public class JedisPubSubManager{
@@ -14,55 +15,73 @@ public class JedisPubSubManager{
 
 	private CustomPubSub pubsub = null;
 
+	private final ReentrantLock lock = new ReentrantLock(true);
+
 	public JedisPubSubManager(final Jedis jedis){
 		this.connection = jedis;
 	}
 
-	public synchronized void subscribe(final String channel, final Consumer<String> function){
+	public void subscribe(final String channel, final Consumer<String> function){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
 		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
 		if(function == null) throw new IllegalArgumentException("function is null");
 
-		// Add in the map
-		this.channel_function_map.put(channel, function);
+		// Lock it
+		lock.lock();
+		try{
+			// Add in the map
+			this.channel_function_map.put(channel, function);
 
-		// Subscribe if listener already exists
-		if(this.pubsub != null) this.pubsub.subscribe(channel);
+			// Subscribe if listener already exists
+			if(this.pubsub != null) this.pubsub.subscribe(channel);
 
-		else{
+			else{
 
-			// Create new listener
-			this.pubsub = new CustomPubSub();
+				// Create new listener
+				this.pubsub = new CustomPubSub();
 
-			// Fire it
-			new Thread(() -> connection.subscribe(pubsub, channel)).start();
+				// Fire it
+				new Thread(() -> connection.subscribe(pubsub, channel)).start();
 
-			// No other way to find out if listener is ready for receiving without polling the listener
-			while(!this.pubsub.isSubscribed()){
-				try{
-					Thread.sleep(2);
-				}catch(InterruptedException ignored){
+				// No other way to find out if listener is ready for receiving without polling the listener
+				while(!this.pubsub.isSubscribed()){
+					try{
+						Thread.sleep(2);
+					}catch(InterruptedException ignored){
+					}
 				}
 			}
+		}finally{
+			lock.unlock();
 		}
 	}
 
-	public synchronized void unsubscribe(final String channel){
+	public void unsubscribe(final String channel){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
 		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
 
-		// Unsubscribe
-		this.pubsub.unsubscribe(channel);
-		this.channel_function_map.remove(channel);
+		// Lock it
+		lock.lock();
+		try{
 
-		// Kill the thread if nothing is subscribed
-		if(this.channel_function_map.isEmpty()){
-			this.pubsub.unsubscribe();
-			this.pubsub = null;
+			// If pubsub is already empty, ignore
+			if(this.pubsub == null) return;
+
+			// Unsubscribe
+			this.pubsub.unsubscribe(channel);
+			this.channel_function_map.remove(channel);
+
+			// Kill the thread if nothing is subscribed
+			if(this.channel_function_map.isEmpty()){
+				this.pubsub.unsubscribe();
+				this.pubsub = null;
+			}
+		}finally{
+			lock.unlock();
 		}
 	}
 

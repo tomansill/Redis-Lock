@@ -755,78 +755,326 @@ public class TestLuaScriptForSingleMaster{
 		}
 	}
 
-	private void performExpectedSuccessfulLock(Jedis jedis, ResetableCountDownLatch rcdl, Queue<String> pubsub_result, String script_name, String lockpoint, String lock_name, boolean is_read_lock, boolean is_fair, boolean first_attempt, boolean is_try_lock) throws InterruptedException{
-		this.performExpectedSuccessfulLock(jedis, rcdl, pubsub_result, 0, false, script_name, lockpoint, lock_name, is_read_lock, is_fair, first_attempt, is_try_lock);
-	}
+	@Test
+	public void testUnfairWriteLockOnUnfairReadLock() throws InterruptedException{
 
-	private void performExpectedSuccessfulLock(Jedis jedis, ResetableCountDownLatch rcdl, Queue<String> pubsub_result, long expected_lockcount, boolean lock_owner, String script_name, String lockpoint, String lock_name, boolean is_read_lock, boolean is_fair, boolean first_attempt, boolean is_try_lock) throws InterruptedException{
+		// Check if script is available
+		assumeTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
 
-		// Reset the CDL
-		rcdl.reset(lock_owner ? 2 : 1);
-		
-		// Fire the script
-		Object return_value = jedis.evalsha(
-			script_name,
-			10,
-			lockpoint,
-			"client1",
-			lock_name,
-			(is_fair ? "1" : "0"),
-			(first_attempt ? "1" : "0"),
-			VERY_LONG_TIMEOUT + "",
-			(VERY_LONG_TIMEOUT * 2) + "",
-			(is_read_lock ? "1" : "0"),
-			"",
-			(is_try_lock ? "1" : "0")
-		);
-		
-		// Assert on type
-		Long code = assertType(Long.class, return_value);
-		
-		// Assert on code
-		assertEquals("Return code is not zero!", 0, code.longValue());
-		
-		// Block until message is received on pubsub or time out
-		assertTrue("The message never came!", rcdl.await(AWAIT_TIMEOUT, TimeUnit.MILLISECONDS));
-		
-		// Assert on pubsub notification
-		if(!lock_owner) assertEquals("Message Queue is expected to have only one message on it. ", 1, pubsub_result.size());
-		else assertEquals("Message Queue is expected to have two message on it. ", 2, pubsub_result.size());
+		// Check if pool is available
+		assumeNotNull("Pool is not initialized, we cannot test this.", POOL);
 
-		// Assert on the shared message
-		if(lock_owner) assertEquals("Message from Message Queue is not correct. ", "o:" + lockpoint, pubsub_result.poll());
+		// Create a random lockpoint
+		String lockname = Utility.generateRandomString(8);
 
-		// Assert on the lock message
-		assertEquals("Message from Message Queue is not correct. ", "l:client1:" + lock_name + ":" + VERY_LONG_TIMEOUT + ":" + lockpoint, pubsub_result.poll());
-		
-		// Assert on lock existence
-		assertTrue("Lockpoint doesn't exist. That's not quite right... ", jedis.exists(LOCKPOINT_PREFIX + lockpoint));
-		
-		// Assert on lock lifetime
-		assertEquals("Lockpoint's TTL is not quite right. ", VERY_LONG_TIMEOUT - TIMEOUT_MARGIN, jedis.pttl(LOCKPOINT_PREFIX + lockpoint), TIMEOUT_MARGIN);
-		
-		// Assert on lock value
-		assertEquals("Lockpoint's value is not correct. ", (is_read_lock ? "open" : "unique"), jedis.get(LOCKPOINT_PREFIX + lockpoint));
+		// Lockchannel
+		String lockchannel = LOCKCHANNEL_PREFIX + lockname;
 
-		// Read lock stuff
-		if(is_read_lock){
+		// Create an queue
+		final Queue<String> pubsub_result = new ConcurrentLinkedQueue<>();
 
-			// Assert on lockcount existence
-			assertTrue("Lockcount doesn't exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockpoint));
+		// Create reusable CDL
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(0);
 
-			// Assert on lockcount lifetime
-			assertEquals("Lockcount's TTL is not quite right. ", VERY_LONG_TIMEOUT - TIMEOUT_MARGIN, jedis.pttl(LOCKCOUNT_PREFIX + lockpoint), TIMEOUT_MARGIN);
+		// Grab a connection
+		Jedis jedis = POOL.getResource();
+		try{
 
-			// Assert on lockcount type
-			long count = Long.parseLong(assertType(String.class, jedis.get(LOCKCOUNT_PREFIX + lockpoint)));
+			// Load the script
+			String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
-			// Assert on lockcount value
-			assertEquals("Lockcount's value is not correct. ", expected_lockcount, count);
+			// Subscribe
+			PUB_SUB.subscribe(lockchannel, (message) -> {
+				pubsub_result.add(message);
+				rcdl.countDown();
+			});
+
+			// Perform a successful unfair lock
+			performExpectedSuccessfulLock(
+					jedis,
+					rcdl,
+					pubsub_result,
+					1,
+					true,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					true,
+					false,
+					true,
+					false
+			);
+
+			// Perform an unsuccessful unfair write lock
+			performExpectedUnsuccessfulLock(
+					jedis,
+					0,
+					pubsub_result,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					false,
+					false,
+					true,
+					false
+			);
+
+			// Assert non-existence of lockwait
+			assertFalse("Lockwait is not supposed to exist. That's not quite right... ", jedis.exists(LOCKWAIT_PREFIX + lockname));
+
+			// Assert existence of lockcount
+			assertTrue("Lockcount is supposed to exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockname));
+
+			// Assert non-existence of lockpool
+			assertFalse("Lockpool is not supposed to exist. That's not quite right... ", jedis.exists(LOCKPOOL_PREFIX + lockname));
+
+		}finally{
+			cleanup(jedis, lockname);
+			PUB_SUB.unsubscribe(lockchannel);
+			jedis.close();
 		}
-
-		// Assert on pubsub notification
-		assertEquals("Message Queue should be empty at this point...", 0, pubsub_result.size());
 	}
+
+	@Test
+	public void testFairWriteLockOnUnfairReadLock() throws InterruptedException{
+
+		// Check if script is available
+		assumeTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
+
+		// Check if pool is available
+		assumeNotNull("Pool is not initialized, we cannot test this.", POOL);
+
+		// Create a random lockpoint
+		String lockname = Utility.generateRandomString(8);
+
+		// Lockchannel
+		String lockchannel = LOCKCHANNEL_PREFIX + lockname;
+
+		// Create an queue
+		final Queue<String> pubsub_result = new ConcurrentLinkedQueue<>();
+
+		// Create reusable CDL
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(0);
+
+		// Grab a connection
+		Jedis jedis = POOL.getResource();
+		try{
+
+			// Load the script
+			String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
+
+			// Subscribe
+			PUB_SUB.subscribe(lockchannel, (message) -> {
+				pubsub_result.add(message);
+				rcdl.countDown();
+			});
+
+			// Perform a successful unfair lock
+			performExpectedSuccessfulLock(
+					jedis,
+					rcdl,
+					pubsub_result,
+					1,
+					true,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					true,
+					false,
+					true,
+					false
+			);
+
+			// Perform an unsuccessful fair write lock
+			performExpectedUnsuccessfulLock(
+					jedis,
+					1,
+					pubsub_result,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					false,
+					true,
+					true,
+					false
+			);
+
+			// Assert existence of lockwait
+			assertTrue("Lockwait is supposed to exist. That's not quite right... ", jedis.exists(LOCKWAIT_PREFIX + lockname));
+
+			// Assert existence of lockcount
+			assertTrue("Lockcount is supposed to exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockname));
+
+			// Assert non-existence of lockpool
+			assertFalse("Lockpool is not supposed to exist. That's not quite right... ", jedis.exists(LOCKPOOL_PREFIX + lockname));
+
+		}finally{
+			cleanup(jedis, lockname);
+			PUB_SUB.unsubscribe(lockchannel);
+			jedis.close();
+		}
+	}
+
+	@Test
+	public void testUnfairWriteLockOnFairReadLock() throws InterruptedException{
+
+		// Check if script is available
+		assumeTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
+
+		// Check if pool is available
+		assumeNotNull("Pool is not initialized, we cannot test this.", POOL);
+
+		// Create a random lockpoint
+		String lockname = Utility.generateRandomString(8);
+
+		// Lockchannel
+		String lockchannel = LOCKCHANNEL_PREFIX + lockname;
+
+		// Create an queue
+		final Queue<String> pubsub_result = new ConcurrentLinkedQueue<>();
+
+		// Create reusable CDL
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(0);
+
+		// Grab a connection
+		Jedis jedis = POOL.getResource();
+		try{
+
+			// Load the script
+			String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
+
+			// Subscribe
+			PUB_SUB.subscribe(lockchannel, (message) -> {
+				pubsub_result.add(message);
+				rcdl.countDown();
+			});
+
+			// Perform a successful fair read lock
+			performExpectedSuccessfulLock(
+					jedis,
+					rcdl,
+					pubsub_result,
+					1,
+					true,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					true,
+					true,
+					true,
+					false
+			);
+
+			// Perform an unsuccessful unfair write lock
+			performExpectedUnsuccessfulLock(
+					jedis,
+					0,
+					pubsub_result,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					false,
+					false,
+					true,
+					false
+			);
+
+			// Assert non-existence of lockwait
+			assertFalse("Lockwait is not supposed to exist. That's not quite right... ", jedis.exists(LOCKWAIT_PREFIX + lockname));
+
+			// Assert existence of lockcount
+			assertTrue("Lockcount is supposed to exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockname));
+
+			// Assert non-existence of lockpool
+			assertFalse("Lockpool is not supposed to exist. That's not quite right... ", jedis.exists(LOCKPOOL_PREFIX + lockname));
+
+		}finally{
+			cleanup(jedis, lockname);
+			PUB_SUB.unsubscribe(lockchannel);
+			jedis.close();
+		}
+	}
+
+	@Test
+	public void testFairWriteLockOnFairReadLock() throws InterruptedException{
+
+		// Check if script is available
+		assumeTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
+
+		// Check if pool is available
+		assumeNotNull("Pool is not initialized, we cannot test this.", POOL);
+
+		// Create a random lockpoint
+		String lockname = Utility.generateRandomString(8);
+
+		// Lockchannel
+		String lockchannel = LOCKCHANNEL_PREFIX + lockname;
+
+		// Create an queue
+		final Queue<String> pubsub_result = new ConcurrentLinkedQueue<>();
+
+		// Create reusable CDL
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(0);
+
+		// Grab a connection
+		Jedis jedis = POOL.getResource();
+		try{
+
+			// Load the script
+			String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
+
+			// Subscribe
+			PUB_SUB.subscribe(lockchannel, (message) -> {
+				pubsub_result.add(message);
+				rcdl.countDown();
+			});
+
+			// Perform a successful fair read lock
+			performExpectedSuccessfulLock(
+					jedis,
+					rcdl,
+					pubsub_result,
+					1,
+					true,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					true,
+					true,
+					true,
+					false
+			);
+
+			// Perform an unsuccessful fair write lock
+			performExpectedUnsuccessfulLock(
+					jedis,
+					1,
+					pubsub_result,
+					script_hash,
+					lockname,
+					Utility.generateRandomString(4),
+					false,
+					true,
+					true,
+					false
+			);
+
+			// Assert existence of lockwait
+			assertTrue("Lockwait is supposed to exist. That's not quite right... ", jedis.exists(LOCKWAIT_PREFIX + lockname));
+
+			// Assert existence of lockcount
+			assertTrue("Lockcount is supposed to exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockname));
+
+			// Assert non-existence of lockpool
+			assertFalse("Lockpool is not supposed to exist. That's not quite right... ", jedis.exists(LOCKPOOL_PREFIX + lockname));
+
+		}finally{
+			cleanup(jedis, lockname);
+			PUB_SUB.unsubscribe(lockchannel);
+			jedis.close();
+		}
+	}
+
 
 	@Test
 	public void testUnfairReadLockOnUnfairWriteLock() throws InterruptedException{
@@ -905,6 +1153,157 @@ public class TestLuaScriptForSingleMaster{
 			PUB_SUB.unsubscribe(lockchannel);
 			jedis.close();
 		}
+	}
+
+	@Test
+	public void testWriteLockUnlock() throws InterruptedException{
+
+		// Check if script is available
+		assumeTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
+
+		// Check if pool is available
+		assumeNotNull("Pool is not initialized, we cannot test this.", POOL);
+
+		// Create a random lockpoint
+		String lockname = Utility.generateRandomString(8);
+
+		// Lockchannel
+		String lockchannel = LOCKCHANNEL_PREFIX + lockname;
+
+		// Create an queue
+		final Queue<String> pubsub_result = new ConcurrentLinkedQueue<>();
+
+		// Create reusable CDL
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(0);
+
+		// Grab a connection
+		Jedis jedis = POOL.getResource();
+		try{
+
+			// Load the script
+			String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
+
+			// Subscribe
+			PUB_SUB.subscribe(lockchannel, (message) -> {
+				pubsub_result.add(message);
+				rcdl.countDown();
+			});
+
+		}finally{
+			cleanup(jedis, lockname);
+			PUB_SUB.unsubscribe(lockchannel);
+			jedis.close();
+		}
+	}
+
+	private void performExpectedSuccessfulLock(Jedis jedis, ResetableCountDownLatch rcdl, Queue<String> pubsub_result, String script_name, String lockpoint, String lock_name, boolean is_read_lock, boolean is_fair, boolean first_attempt, boolean is_try_lock) throws InterruptedException{
+		this.performExpectedSuccessfulLock(jedis, rcdl, pubsub_result, 0, false, script_name, lockpoint, lock_name, is_read_lock, is_fair, first_attempt, is_try_lock);
+	}
+
+	private void performExpectedSuccessfulLock(Jedis jedis, ResetableCountDownLatch rcdl, Queue<String> pubsub_result, long expected_lockcount, boolean lock_owner, String script_name, String lockpoint, String lock_name, boolean is_read_lock, boolean is_fair, boolean first_attempt, boolean is_try_lock) throws InterruptedException{
+
+		// Reset the CDL
+		rcdl.reset(lock_owner ? 2 : 1);
+		
+		// Fire the script
+		Object return_value = jedis.evalsha(
+			script_name,
+			10,
+			lockpoint,
+			"client1",
+			lock_name,
+			(is_fair ? "1" : "0"),
+			(first_attempt ? "1" : "0"),
+			VERY_LONG_TIMEOUT + "",
+			(VERY_LONG_TIMEOUT * 2) + "",
+			(is_read_lock ? "1" : "0"),
+			"",
+			(is_try_lock ? "1" : "0")
+		);
+		
+		// Assert on type
+		Long code = assertType(Long.class, return_value);
+		
+		// Assert on code
+		assertEquals("Return code is not zero!", 0, code.longValue());
+		
+		// Block until message is received on pubsub or time out
+		assertTrue("The message never came!", rcdl.await(AWAIT_TIMEOUT, TimeUnit.MILLISECONDS));
+		
+		// Assert on pubsub notification
+		if(!lock_owner) assertEquals("Message Queue is expected to have only one message on it. ", 1, pubsub_result.size());
+		else assertEquals("Message Queue is expected to have two message on it. ", 2, pubsub_result.size());
+
+		// Assert on the shared message
+		if(lock_owner) assertEquals("Message from Message Queue is not correct. ", "o:" + lockpoint, pubsub_result.poll());
+
+		// Assert on the lock message
+		assertEquals("Message from Message Queue is not correct. ", "l:client1:" + lock_name + ":" + VERY_LONG_TIMEOUT + ":" + lockpoint, pubsub_result.poll());
+		
+		// Assert on lock existence
+		assertTrue("Lockpoint doesn't exist. That's not quite right... ", jedis.exists(LOCKPOINT_PREFIX + lockpoint));
+		
+		// Assert on lock lifetime
+		assertEquals("Lockpoint's TTL is not quite right. ", VERY_LONG_TIMEOUT - TIMEOUT_MARGIN, jedis.pttl(LOCKPOINT_PREFIX + lockpoint), TIMEOUT_MARGIN);
+		
+		// Assert on lock value
+		assertEquals("Lockpoint's value is not correct. ", (is_read_lock ? "open" : "unique"), jedis.get(LOCKPOINT_PREFIX + lockpoint));
+
+		// Read lock stuff
+		if(is_read_lock){
+
+			// Assert on lockcount existence
+			assertTrue("Lockcount doesn't exist. That's not quite right... ", jedis.exists(LOCKCOUNT_PREFIX + lockpoint));
+
+			// Assert on lockcount lifetime
+			assertEquals("Lockcount's TTL is not quite right. ", VERY_LONG_TIMEOUT - TIMEOUT_MARGIN, jedis.pttl(LOCKCOUNT_PREFIX + lockpoint), TIMEOUT_MARGIN);
+
+			// Assert on lockcount type
+			long count = Long.parseLong(assertType(String.class, jedis.get(LOCKCOUNT_PREFIX + lockpoint)));
+
+			// Assert on lockcount value
+			assertEquals("Lockcount's value is not correct. ", expected_lockcount, count);
+		}
+
+		// Assert on pubsub notification
+		assertEquals("Message Queue should be empty at this point...", 0, pubsub_result.size());
+	}
+
+	private void performWriteUnlock(
+		Jedis jedis,
+		Queue<String> pubsub_result,
+		ResetableCountDownLatch rcdl,
+		String script_name,
+		String lockpoint,
+		String lock_name,
+		boolean expected_share,
+		boolean populated_lockwait
+	) throws InterruptedException{
+		// Fire the script
+		Object return_value = jedis.evalsha(
+				script_name,
+				3,
+				lockpoint,
+				"0"
+		);
+
+		// Assert on type
+		Boolean result = assertType(Boolean.class, return_value);
+
+		// Assert on return value
+		assertTrue("Result is not true", result);
+
+		// Assert on lockpoint existence
+		assertFalse("Lockpoint still exists... That's not quite right.", jedis.exists(LOCKPOINT_PREFIX + lockpoint));
+
+		// Assert on lockcount existence
+		assertFalse("Lockcount exists... That's not quite right.", jedis.exists(LOCKCOUNT_PREFIX + lockpoint));
+
+		// Block until message is received on pubsub or time out
+		assertTrue("The message never came!", rcdl.await(AWAIT_TIMEOUT, TimeUnit.MILLISECONDS));
+
+		// Assert on pubsub notification
+		assertEquals("Message Queue is expected to have two message on it. ", 1, pubsub_result.size());
 	}
 
 	private void performExpectedUnsuccessfulLock(

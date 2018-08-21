@@ -30,7 +30,7 @@ public class TestSingleInstance {
         assumeTrue("We are not connected to Redis server, this test cannot continue.",client != null);
 
         // Set num threads
-        int num_threads = 20;
+        int num_threads = 3;
 
         // Do control test
         assertTrue("The control test number one has failed, the test is flawed.", !com.tomansill.redis.test.util.TestFunction.performMultipleWriteLock(null, num_threads, debug));

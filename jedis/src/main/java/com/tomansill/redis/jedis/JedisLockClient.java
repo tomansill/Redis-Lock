@@ -4,7 +4,9 @@ import com.tomansill.redis.exception.InvalidTypeException;
 import com.tomansill.redis.lock.AbstractRedisLockClient;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.exceptions.JedisDataException;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 
 import static com.tomansill.redis.lock.Utility.checkValueForNull;
@@ -97,7 +99,10 @@ public class JedisLockClient extends AbstractRedisLockClient {
 
 	    // Fire it
 	    try{
-	    	return jedis.scriptLoad(script);
+		    return jedis.scriptLoad(script);
+	    }catch(JedisDataException e){
+	    	System.out.println(script);
+	    	throw e;
 	    }finally{
 	    	if(this.connection == null) jedis.close();
 	    }
@@ -121,7 +126,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	    try{
 
 	    	// Evaluate script
-		    Object return_obj = this.connection.evalsha(hash, args.length, args);
+		    Object return_obj = jedis.evalsha(hash, args.length, args);
 
 		    // Check if obj is null
 		    if(return_obj == null) throw new InvalidTypeException("Boolean", "null");
@@ -159,6 +164,8 @@ public class JedisLockClient extends AbstractRedisLockClient {
     @Override
     protected long longEval(final String hash, final String... args) throws InvalidTypeException{
 
+    	System.out.println("hash: " + hash + " args: " + Arrays.toString(args));
+
 	    // Get Jedis connection
 	    Jedis jedis;
 	    if(this.connection != null) jedis = this.connection;
@@ -168,7 +175,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	    try{
 
 		    // Evaluate script
-		    Object return_obj = this.connection.evalsha(hash, args.length, args);
+		    Object return_obj = jedis.evalsha(hash, args.length, args);
 
 		    // Check if obj is null
 		    if(return_obj == null) throw new InvalidTypeException("Long", "null");
@@ -211,7 +218,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	    try{
 
 		    // Evaluate script
-		    Object return_obj = this.connection.evalsha(hash, args.length, args);
+		    Object return_obj = jedis.evalsha(hash, args.length, args);
 
 		    // Check if obj is null
 		    if(return_obj == null) throw new InvalidTypeException("String", "null");

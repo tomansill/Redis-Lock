@@ -20,12 +20,60 @@ public abstract class AbstractRedisLockClient{
 
     // ##### PUBLIC STATIC MEMBERS #####
 
-    /** Default lease duration */
-    private final static long DEFAULT_LEASE_DURATION_SECONDS = 60;
+	public static void setUp(){
+
+		// Initialize scripts - done only once
+		if(SCRIPT_NAME_TO_SCRIPTS == null && SCRIPT_NAME_TO_SCRIPT_HASH == null){
+
+			// Initialize script maps
+			SCRIPT_NAME_TO_SCRIPTS = new HashMap<>();
+			SCRIPT_NAME_TO_SCRIPT_HASH = new HashMap<>();
+
+			// Class loader
+			ClassLoader class_loader = AbstractRedisLockClient.class.getClassLoader();
+
+			// Filenames
+			String[] filenames = {"single_instance_lock", "single_instance_refire", "single_instance_unlock"};
+
+			// Load scripts
+			for(String filename : filenames){
+
+				// Get file
+				File file = new File(class_loader.getResource(filename + ".lua").getFile());
+
+				// Serious error occurs if those files cannot be found
+				if(!file.exists()){
+					throw new ExceptionInInitializerError("Cannot find '" + filename + ".lua' on the package resouces directory!");
+				}
+
+				// Read the script
+				StringBuilder sb = new StringBuilder();
+				try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+					String line;
+					while ((line = br.readLine()) != null) {
+						int index = line.indexOf("--");
+						//if(index != -1) line = line.substring(0, index);
+						//if(!line.trim().equals("")) {
+							sb.append(line);
+							sb.append('\n');
+						//}
+					}
+				} catch (IOException ioe) {
+					throw new ExceptionInInitializerError("Failed to read '" + filename + ".lua' on the package resouces directory! Reason: " + ioe.getMessage());
+				}
+
+				// Add it to the script
+				SCRIPT_NAME_TO_SCRIPTS.put(filename, sb.toString());
+			}
+		}
+	}
 
     // ##### PRIVATE STATIC MEMBERS #####
 
-    /** Map of Redis lua scripts */
+	/** Default lease duration */
+	private final static long DEFAULT_LEASE_DURATION_SECONDS = 60;
+
+	/** Map of Redis lua scripts */
     private static Map<String, String> SCRIPT_NAME_TO_SCRIPTS = null;
 
     /** Map of Redis lua script hash */
@@ -65,6 +113,12 @@ public abstract class AbstractRedisLockClient{
     /** Set of unfair locks */
     private final Map<String,Set<String>> unfair_locks_set_map = new ConcurrentHashMap<>();
 
+	/** Set of shared locks */
+	private final Map<String,Set<String>> shared_locks_set_map = new ConcurrentHashMap<>();
+
+	/** Set of shared lock owners */
+	private final Set<String> shared_lock_owners = new HashSet<>();
+
     /** Timers */
     private final Timer timer = new Timer();
     private final ConcurrentHashMap<String, TimerTask> lockpoint_to_timer = new ConcurrentHashMap<>();
@@ -85,55 +139,12 @@ public abstract class AbstractRedisLockClient{
     	if(prefix == null) this.prefix = "";
     	else this.prefix = prefix;
 
+    	// Setup
+	    AbstractRedisLockClient.setUp();
+
         // Get random string
         this.client_id = Utility.generateRandomString(8);
 
-        System.out.println("Client id: " + this.client_id);
-
-        // Initialize scripts - done only once
-        if(SCRIPT_NAME_TO_SCRIPTS == null && SCRIPT_NAME_TO_SCRIPT_HASH == null){
-
-            // Initialize script maps
-            SCRIPT_NAME_TO_SCRIPTS = new HashMap<>();
-            SCRIPT_NAME_TO_SCRIPT_HASH = new HashMap<>();
-
-            // Class loader
-            ClassLoader class_loader = getClass().getClassLoader();
-
-            // Filenames
-            String[] filenames = {"single_write_lock", "single_write_unlock", "single_refire"};
-
-            // Load scripts
-            for(String filename : filenames){
-
-                // Get file
-                File file = new File(class_loader.getResource(filename + ".lua").getFile());
-
-                // Serious error occurs if those files cannot be found
-                if(!file.exists()){
-                    throw new ExceptionInInitializerError("Cannot find '" + filename + ".lua' on the package resouces directory!");
-                }
-
-                // Read the script
-                StringBuilder sb = new StringBuilder();
-                try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        int index = line.indexOf("--");
-                        if(index != -1) line = line.substring(0, index);
-                        if(!line.trim().equals("")) {
-                            sb.append(line);
-                            sb.append('\n');
-                        }
-                    }
-                } catch (IOException ioe) {
-                    throw new ExceptionInInitializerError("Failed to read '" + filename + ".lua' on the package resouces directory! Reason: " + ioe.getMessage());
-                }
-
-                // Add it to the script
-                SCRIPT_NAME_TO_SCRIPTS.put(filename, sb.toString());
-            }
-        }
     }
 
     /** Returns true if this client is connected to a cluster, false otherwise
@@ -218,7 +229,7 @@ public abstract class AbstractRedisLockClient{
      */
     public abstract void unsubscribe(final String channel);
 
-    private CountDownLatch setUpSubscription(final String lockpoint, final String lock_id, final boolean is_fair, final boolean first_time){
+    private CountDownLatch setUpSubscription(final String lockpoint, final String lock_id, final boolean is_read_lock, final boolean is_fair, final boolean first_time){
 
         // Set up subscription listener
         if(first_time){
@@ -231,8 +242,16 @@ public abstract class AbstractRedisLockClient{
         CountDownLatch cdl = new CountDownLatch(1);
         this.lock_to_cdl_map.put(lock_id, cdl);
         if(!is_fair){
-        	this.unfair_locks_set_map.putIfAbsent(lockpoint,new HashSet<>());
-        	this.unfair_locks_set_map.get(lockpoint).add(lock_id);
+        	synchronized(this.unfair_locks_set_map){
+		        this.unfair_locks_set_map.putIfAbsent(lockpoint, new HashSet<>());
+		        this.unfair_locks_set_map.get(lockpoint).add(lock_id);
+	        }
+        }
+        if(is_read_lock){
+        	synchronized(this.shared_locks_set_map){
+		        this.shared_locks_set_map.putIfAbsent(lockpoint, new HashSet<>());
+		        this.shared_locks_set_map.get(lockpoint).add(lock_id);
+	        }
         }
         return cdl;
     }
@@ -241,9 +260,20 @@ public abstract class AbstractRedisLockClient{
 
         // Remove entry
         this.lock_to_cdl_map.remove(lock_id);
-        synchronized(this.unfair_locks_set_map) {
-            this.unfair_locks_set_map.remove(lock_id);
+        synchronized(this.unfair_locks_set_map){
+        	Set<String> locks = this.unfair_locks_set_map.get(lockpoint);
+        	if(locks != null){
+        		locks.remove(lock_id);
+		        if(locks.isEmpty()) this.unfair_locks_set_map.remove(lockpoint);
+	        }
         }
+	    synchronized(this.shared_locks_set_map){
+		    Set<String> locks = this.shared_locks_set_map.get(lockpoint);
+		    if(locks != null){
+			    locks.remove(lock_id);
+			    if(locks.isEmpty()) this.shared_locks_set_map.remove(lockpoint);
+		    }
+	    }
 
         // Unsubscribe
         this.unsubscribe(lockpoint);
@@ -315,21 +345,36 @@ public abstract class AbstractRedisLockClient{
 
         // Evaluate
         long duration = this.performLongEval(
-            "single_write_lock",
+            "single_instance_lock",
             lockpoint,
             this.client_id,
             lock_id,
-	        is_read_lock ? "1" : "0",
             is_fair ? "1" : "0",
             first_attempt ? "1" : "0",
             ms_unit.convert(lock_lease_time, unit) + "",
             DEFAULT_LEASE_DURATION_SECONDS * 1000 + "",
+	        is_read_lock ? "1" : "0",
 	        prefix,
 	        try_lock ? "1" : "0"
         );
 
+        System.out.println("lock_id: " + lock_id + " result: " + duration);
+
         // If equals to zero, means lock is successful
-        if(duration == 0) return true;
+        if(duration == 0){
+
+        	// If readlock, indicate as a lockowner
+        	if(is_read_lock){
+				synchronized(this.shared_lock_owners){
+					this.shared_lock_owners.add(lock_id);
+				}
+	        }
+
+        	return true;
+        }
+
+        // If equals to -3, means shared lock
+        if(duration == -3) return true;
 
         // Set timer if more than zero
         if(duration > 0) this.setRefireTimer(lockpoint, duration);
@@ -340,12 +385,14 @@ public abstract class AbstractRedisLockClient{
         return false;
     }
 
-    private void performSingleWriteUnlock(final String lockpoint){
+    private void performSingleMasterUnlock(final String lockpoint, final boolean is_owner){
 
         // Evaluate
         this.performBooleanEval(
-            "single_write_unlock",
-            lockpoint
+            "single_instance_unlock",
+            lockpoint,
+	        prefix,
+	        is_owner ? "1" : "0"
         );
     }
 
@@ -367,7 +414,7 @@ public abstract class AbstractRedisLockClient{
      */
     boolean performLock(final String lockpoint, final String lock_id, final boolean is_read_lock, final boolean try_lock, final boolean is_fair, final long time_out, final TimeUnit unit, final long lock_lease_time) throws InterruptedException{
 
-        //System.out.println("performLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ")");
+        System.out.println("performLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ")");
 
         long actual_lease_time = (lock_lease_time < 1 ? getLeaseDuration(unit): lock_lease_time);
         boolean result;
@@ -383,13 +430,13 @@ public abstract class AbstractRedisLockClient{
                  *  and get stuck on waiting for lock message that may never arrive.
                  */
                 CountDownLatch cdl = null;
-	            if(!try_lock) cdl = this.setUpSubscription(lockpoint, lock_id, is_fair, first_attempt);
+	            if(!try_lock) cdl = this.setUpSubscription(lockpoint, lock_id, is_read_lock, is_fair, first_attempt);
 
                 // Execute it
                 result = this.performSingleMasterLock(lockpoint, lock_id, is_read_lock, try_lock, is_fair, first_attempt, unit, actual_lease_time);
                 first_attempt = false;
 
-                //System.out.println("lock id: " + lock_id + " result: " + result);
+                System.out.println("client_id: " + client_id + " lock id: " + lock_id + " result: " + result);
 
                 // If it was not success, wait then try again
                 if(!result && !try_lock){
@@ -421,16 +468,23 @@ public abstract class AbstractRedisLockClient{
     /** Performs a single write unlock
      *  @param lockpoint lockpoint to unlock
      */
-    void writeUnlock(final String lockpoint, final String lock_id){
+    void unlock(final String lockpoint, final String lock_id){
 
-        //System.out.println("writeUnlock(lockpoint=" + lockpoint + ", lock_id=" + lock_id +")");
+        System.out.println("unlock(lockpoint=" + lockpoint + ", lock_id=" + lock_id +")");
 
-        System.out.println(this.client_id + " lock_id: " + lock_id);
+        // Check if lock owner
+        boolean lock_owner;
+        synchronized(this.shared_lock_owners){
+        	lock_owner = shared_lock_owners.remove(lock_id);
+        }
 
-        this.performSingleWriteUnlock(lockpoint);
+        // Call it
+        this.performSingleMasterUnlock(lockpoint, lock_owner);
     }
 
     private void processMessage(final String message){
+
+    	System.out.println("message: " + message);
 
     	Message notification_message = Message.interpret(message);
 
@@ -458,54 +512,42 @@ public abstract class AbstractRedisLockClient{
 		    }
 	    }else if(notification_message.type == Message.Type.SHARED){
 
+    		// Activate all sharedlocks
+		    Set<String> set = this.shared_locks_set_map.get(notification_message.lockpoint);
+
+		    // Ignore if this lockpoint has no members
+		    if(set == null) return;
+
+		    // Fire all cdls
+		    synchronized(this.shared_locks_set_map){
+			    for(String lock_id : set){
+					this.lock_to_cdl_map.get(lock_id).countDown();
+			    }
+		    }
 	    }else if(notification_message.type == Message.Type.UNLOCK){
+
+    		// Make sure message is meant for this client
+    		if(notification_message.client_id.equals(client_id)){
+
+			    // Check whose lock id this is for
+			    CountDownLatch cdl = this.lock_to_cdl_map.get(notification_message.lock_id);
+
+			    // Panic if cdl is empty
+			    if(cdl == null){
+			    	// Panic
+				    System.err.println("panic 1: " + notification_message.lock_id + " " + notification_message.client_id + " " + notification_message.lockpoint);
+				    return;
+			    }
+
+			    // Count down
+			    cdl.countDown();
+		    }
 
 	    }else if(notification_message.type == Message.Type.LOCK){
 
+    		// Refire with new duration
+		    this.setRefireTimer(notification_message.lockpoint, notification_message.lease_time);
 	    }
-	    /*
-        // Check if it's unfair unlock message
-        if(message.charAt(0) == '#') { // Unfair
-
-        } else { // Possibly fair
-
-            // Read the message for the delimiters - find client index and lock index
-            // Message is in format of "<event_type>:<client_id>:<lock_id>:<lockpoint>"
-            int client_index = message.indexOf(":");
-            int lock_index = message.indexOf(":", client_index + 1);
-            int lockpoint_index = message.indexOf(":", lock_index + 1);
-
-            // If any of indices are -1, then no ":" are found so the message is invalid
-            if(client_index == -1 || lock_index == -1) return;
-
-            // Extract event type
-            String event_type = message.substring(0, client_index);
-
-            // Check event type
-            if(event_type.equals("l")){ // locked event
-                // TODO
-            }else if(event_type.equals("o")){ // Unlock event
-
-                //Extract client id
-                String client_id = message.substring(client_index + 1, lock_index);
-
-                // Check if client id matches
-                if(!this.client_id.equals(client_id)) { // Doesn't match
-                    // TODO set timer
-                    //System.err.println("panic 3");
-                    return;
-                }
-
-                // Extract lock id
-                String lock_id = message.substring(lock_index + 1, lockpoint_index);
-
-                // Find the matching lock and count it down
-                CountDownLatch cdl = this.lock_to_cdl_map.remove(lock_id);
-                if(cdl != null) cdl.countDown();
-                else this.refire(message.substring(lockpoint_index + 1));
-            }
-        }
-        */
     }
 
     private void setRefireTimer(final String lockpoint, long duration){
@@ -552,4 +594,20 @@ public abstract class AbstractRedisLockClient{
     	// Else, wait for that duration
 	    else setRefireTimer(lockpoint, duration);
     }
+
+    // REMOVE THIS LATER
+	public void print(String... messages){
+
+    	StringBuilder sb = new StringBuilder();
+
+    	sb.append("client-id: ");
+	    sb.append(client_id);
+
+    	for(String message : messages){
+    		sb.append(message);
+    		sb.append(' ');
+	    }
+
+    	System.out.println(sb.toString());
+	}
 }

@@ -6,7 +6,7 @@
 
 -- Initialization
 local lockpoint = KEYS[3] .. "lockpoint:" .. KEYS[1]
-local lockwait_lease_time = KEYS[1]
+local lockwait_lease_time = tonumber(KEYS[2])
 local lockwait = KEYS[3] .. "lockwait:" .. KEYS[1]
 local lockpool = KEYS[3] .. "lockpool:" .. KEYS[1]
 local lockchannel = KEYS[3] .. "channel:" .. KEYS[1]
@@ -23,7 +23,7 @@ if expire == -2 then
     if popped == "S" then redis.call("DEL", lockpool) end
 
     -- Extend the lockwait
-    redis.call("PEXPIRE", lockwait_lease_time)
+    redis.call("PEXPIRE", lockpoint, lockwait_lease_time)
 
     -- Declare this lockpoint dead (to prevent herd effect of this function) so it can get picked up by next lock
     redis.call("SET", lockpoint, "dead")

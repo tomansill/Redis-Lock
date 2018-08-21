@@ -27,8 +27,12 @@ local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
 local trylock = tonumber(KEYS[10])
 local lockchannel = KEYS[9] .. "lockchannel:" .. KEYS[1]
 
+redis.call("SET", "LOL3", "SOMETHING")
+
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) then
+
+    redis.call("SET", "LOL4", "SOMETHING")
 
     -- Check if there's already locks waiting, if so, join them
     -- (Reason: so locks don't cut in the line thus enforcing fair locking policy)
@@ -58,9 +62,13 @@ if (first_attempt == 1) and (is_fair == 1) then
 
 end
 
+redis.call("SET", "LOL1", "SOMETHING")
+
 -- Lock it
 local result = redis.call("GET", lockpoint)
 if (not result) or (result == "dead") then -- Cleared to lock
+
+    redis.call("SET", "LOL", "SOMETHING")
 
     -- Switch on shared or read lock
     if (is_read_lock == 1) then -- Read lock
@@ -88,6 +96,8 @@ if (not result) or (result == "dead") then -- Cleared to lock
 
 else -- Lock failed
 
+    redis.call("SET", "LOL2", "SOMETHING")
+
     -- If trylock, return immediately
     if trylock == 1 then return -1 end
 
@@ -108,7 +118,7 @@ else -- Lock failed
             redis.call("PUBLISH", lockchannel, "l:" .. client_lock_id .. ":" .. lock_lease_time .. ":" .. KEYS[1])
 
             -- Success
-            return 0 -- 0 means success
+            return -3 -- -3 means success (shared success)
 
         else -- the lockpoint is not open for sharing - this means readlock is blocked
 

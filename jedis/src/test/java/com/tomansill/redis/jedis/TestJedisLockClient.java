@@ -17,7 +17,7 @@ public class TestJedisLockClient {
     private static JedisPool[] pools = null;
     private static JedisLockClient[] clients = null;
 
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     @BeforeClass
     public static void setUp(){
