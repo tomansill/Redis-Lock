@@ -2,6 +2,7 @@ package com.tomansill.redis.lock;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Random;
 
 /** Sensitive data object, used for testing concurrency mechanisms
@@ -107,16 +108,16 @@ public class Utility{
         }
     }
 
-
     /** Generates a random string
      *  @param length length of string
-     *  @param secure true use only securerandom source, false to allow usage of non-secure random source if secure random
+     *  @param secure true use only secure random source, false to allow usage of non-secure random source if secure random
      *                source cannot be obtained
      *  @return string of random characters in hexidecimal format
      */
     public static String generateRandomString(final int length, final boolean secure) throws NoSuchAlgorithmException{
         // Convert to hex and return it
-        return Utility.toHex(generateRandomArray((length/2) + (length % 2), secure)).substring(0, length);
+	    return Base64.getEncoder().encodeToString(generateRandomArray(3*length, secure)).replace("/", "A").replace("+", "B").substring(0, length);
+
     }
 
     /** Generates a random string. <B>NOTE:</B> This function is not guaranteed to draw from secure random source
@@ -125,7 +126,7 @@ public class Utility{
      */
     public static String generateRandomString(final int length){
         // Convert to hex and return it
-        return Utility.toHex(generateRandomArray((length/2) + (length % 2))).substring(0, length);
+        return Base64.getEncoder().encodeToString(generateRandomArray(3*length)).replace("/", "A").replace("+", "B").substring(0, length);
     }
 
     public static <T> T checkValueForNull(final T value, final String variable_name){

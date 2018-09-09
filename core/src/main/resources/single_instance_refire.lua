@@ -4,12 +4,22 @@
 -- KEYS[2] lockwait_lease - lockwait lease in milliseconds
 -- KEYS[3] prefix - prefix for lock namespaces
 
+-- Debug
+--!start
+local debug_msg = "single_instance_refire INPUTS"
+debug_msg = debug_msg .. "\n\t lockpoint='" .. KEYS[1] .. "'"
+debug_msg = debug_msg .. "\n\t lockwait_lease='" .. KEYS[2] .. "'"
+debug_msg = debug_msg .. "\n\t prefix='" .. KEYS[3] .. "'"
+--debug_print(debug_msg)
+debug_print("single_instance_refire")
+--!end
+
 -- Initialization
 local lockpoint = KEYS[3] .. "lockpoint:" .. KEYS[1]
-local lockwait_lease_time = KEYS[1]
+local lockwait_lease_time = tonumber(KEYS[2])
 local lockwait = KEYS[3] .. "lockwait:" .. KEYS[1]
 local lockpool = KEYS[3] .. "lockpool:" .. KEYS[1]
-local lockchannel = KEYS[3] .. "channel:" .. KEYS[1]
+local lockchannel = KEYS[3] .. "lockchannel:" .. KEYS[1]
 
 -- Check if lockwait has been expired (or has been quietly deleted)
 -- this mitigates the herd effect)
@@ -23,7 +33,7 @@ if expire == -2 then
     if popped == "S" then redis.call("DEL", lockpool) end
 
     -- Extend the lockwait
-    redis.call("PEXPIRE", lockwait_lease_time)
+    redis.call("PEXPIRE", lockwait, lockwait_lease_time)
 
     -- Declare this lockpoint dead (to prevent herd effect of this function) so it can get picked up by next lock
     redis.call("SET", lockpoint, "dead")

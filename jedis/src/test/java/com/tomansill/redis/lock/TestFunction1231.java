@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import com.tomansill.redis.test.util.SensitiveData;
+
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -9,9 +11,9 @@ import java.util.concurrent.locks.ReadWriteLock;
 /** Class to hold functions for tests
  *  @author <a href="mailto:tom@ansill.com">Tom Ansill</a>
  */
-public class TestFunction {
+public class TestFunction1231{
 
-    private TestFunction(){} // Prevents instantiation
+    private TestFunction1231(){} // Prevents instantiation
 
     public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final boolean debug) {
         return performMultipleFairLock(rwl, num_threads, 0, null, debug);
@@ -20,7 +22,7 @@ public class TestFunction {
     public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final int max_time_out, final  TimeUnit unit, final boolean debug) {
 
         // Initialize threads
-        final Future<TimeResult>[] futures = new Future[num_threads];
+        final Future[] futures = new Future[num_threads];
 
         // Initialize test object
         final AtomicInteger counter = new AtomicInteger(0);
@@ -90,8 +92,8 @@ public class TestFunction {
         try {
 
             // Get result
-            for (Future<TimeResult> future : futures) {
-                TimeResult tr = future.get();
+            for (Future future : futures) {
+                TimeResult tr = (TimeResult) future.get();
                 if (debug) System.out.println(tr.ranking + " " + tr.elapsed_time);
             }
 
@@ -175,8 +177,8 @@ public class TestFunction {
     }
 
     private static class TimeResult{
-        long elapsed_time = -1;
-        int ranking = 0;
+        long elapsed_time;
+        int ranking;
         TimeResult(long elapsed_time, int ranking){
             this.elapsed_time = elapsed_time;
             this.ranking = ranking;

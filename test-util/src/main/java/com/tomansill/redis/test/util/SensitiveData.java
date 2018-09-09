@@ -3,6 +3,7 @@ package com.tomansill.redis.test.util;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Sensitive data object, used for testing concurrency mechanisms
  *  @author <a href="mailto:tom@ansill.com">Tom Ansill</a>
@@ -14,6 +15,9 @@ public class SensitiveData {
 
     /** Control unit */
     private AtomicBoolean write = new AtomicBoolean(false);
+
+    /** Internal data */
+    private AtomicLong counter = new AtomicLong(0);
 
     /** Constructor for Sensitive Data object */
     public SensitiveData(){}
@@ -42,11 +46,20 @@ public class SensitiveData {
             try{
                 Thread.sleep(TimeUnit.MILLISECONDS.convert(time, unit));
             }catch(InterruptedException e){e.printStackTrace();}
-            this.write.set(false);
+	        counter.getAndIncrement();
+	        this.write.set(false);
         }else{
             if(!quiet) System.out.println("Corrupted!");
             this.corrupted = true;
         }
+    }
+
+    public void read(final long time, TimeUnit unit){
+    	long result = counter.get();
+	    try{
+		    Thread.sleep(TimeUnit.MILLISECONDS.convert(time, unit));
+	    }catch(InterruptedException e){e.printStackTrace();}
+	    if(result != counter.get()) this.corrupted = true;
     }
 
     /** Returns true if corrupted, otherwise false

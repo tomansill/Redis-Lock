@@ -11,6 +11,23 @@
 -- KEYS[9] prefix - prefix for lock namespaces
 -- KEYS[10] trylock - true if the lock will not go in waitlist, false so it will enqueue in waitlist
 
+-- Debug
+--!start
+local debug_msg = "single_instance_lock INPUTS"
+debug_msg = debug_msg .. "\n\t lockpoint='" .. KEYS[1] .. "'"
+debug_msg = debug_msg .. "\n\t client_id='" .. KEYS[2] .. "'"
+debug_msg = debug_msg .. "\n\t lock_id='" .. KEYS[3] .. "'"
+debug_msg = debug_msg .. "\n\t is_fair='" .. KEYS[4] .. "'"
+debug_msg = debug_msg .. "\n\t first_attempt='" .. KEYS[5] .. "'"
+debug_msg = debug_msg .. "\n\t lock_lease='" .. KEYS[6] .. "'"
+debug_msg = debug_msg .. "\n\t lockwait_lease='" .. KEYS[7] .. "'"
+debug_msg = debug_msg .. "\n\t is_read='" .. KEYS[8] .. "'"
+debug_msg = debug_msg .. "\n\t prefix='" .. KEYS[9] .. "'"
+debug_msg = debug_msg .. "\n\t trylock='" .. KEYS[10] .. "'"
+debug_print(debug_msg)
+--debug_print("single_instance_lock")
+--!end
+
 -- Initialization
 local lockpoint = KEYS[9] .. "lockpoint:" .. KEYS[1]
 local client_id = KEYS[2]
@@ -27,12 +44,8 @@ local lockpool = KEYS[9] .. "lockpool:" .. KEYS[1]
 local trylock = tonumber(KEYS[10])
 local lockchannel = KEYS[9] .. "lockchannel:" .. KEYS[1]
 
-redis.call("SET", "LOL3", "SOMETHING")
-
 -- Check if fair and first time
 if (first_attempt == 1) and (is_fair == 1) then
-
-    redis.call("SET", "LOL4", "SOMETHING")
 
     -- Check if there's already locks waiting, if so, join them
     -- (Reason: so locks don't cut in the line thus enforcing fair locking policy)
@@ -44,6 +57,7 @@ if (first_attempt == 1) and (is_fair == 1) then
         -- extend the expiration time
         redis.call("PEXPIRE", lockwait, lockwait_lease_time)
 
+        --!debug_print("single_instance_lock writelock inserted in the waitlist")
         return redis.call("PTTL", lockpoint) -- TODO catch -2 or -1
 
     elseif (is_read_lock == 1) and (redis.call("SCARD", lockpool) ~= 0) then -- Readlock
@@ -54,35 +68,36 @@ if (first_attempt == 1) and (is_fair == 1) then
         -- extend the expiration time
         redis.call("PEXPIRE", lockpool, lockwait_lease_time)
 
+        --!debug_print("single_instance_lock readlock inserted in the waitlist")
         return redis.call("PTTL", lockpoint) -- TODO catch -2 or -1
 
     elseif (trylock == 1) then
+        --!debug_print("single_instance_lock trylock failed and returned -1")
         return -1
     end
 
 end
 
-redis.call("SET", "LOL1", "SOMETHING")
-
 -- Lock it
 local result = redis.call("GET", lockpoint)
 if (not result) or (result == "dead") then -- Cleared to lock
 
-    redis.call("SET", "LOL", "SOMETHING")
-
     -- Switch on shared or read lock
     if (is_read_lock == 1) then -- Read lock
+        --!debug_print("single_instance_lock readlock success!")
         redis.call("SET", lockpoint, "open", "PX", lock_lease_time)
         redis.call("SET", lockcount, "1", "PX", lock_lease_time)
         redis.call("DEL", lockpool); -- Remove the waiting pool so readlocks can go ahead and lock
         redis.call("PUBLISH", lockchannel, "o:" .. KEYS[1]) -- 'o' event indicates open lockpoint
 
-    else -- Read lock
+    else -- Write lock
+        --!debug_print("single_instance_lock writelock success!")
         redis.call("SET", lockpoint, "unique", "PX", lock_lease_time)
     end
 
     -- If this is not first attempt, then the lockwait needs to be popped
     if (first_attempt == 0) and (is_fair == 1) then
+        --!debug_print("single_instance_lock popping lockwait")
         redis.call("LPOP", lockwait)
         if (redis.call("LLEN", lockwait) == 0) then
             redis.call("DEL", lockwait)
@@ -95,8 +110,7 @@ if (not result) or (result == "dead") then -- Cleared to lock
     return 0 -- 0 means success
 
 else -- Lock failed
-
-    redis.call("SET", "LOL2", "SOMETHING")
+    --!debug_print("single_instance_lock failed to lock!")
 
     -- If trylock, return immediately
     if trylock == 1 then return -1 end
@@ -118,6 +132,7 @@ else -- Lock failed
             redis.call("PUBLISH", lockchannel, "l:" .. client_lock_id .. ":" .. lock_lease_time .. ":" .. KEYS[1])
 
             -- Success
+            --!debug_print("single_instance_lock shared lock!")
             return -3 -- -3 means success (shared success)
 
         else -- the lockpoint is not open for sharing - this means readlock is blocked
@@ -136,6 +151,7 @@ else -- Lock failed
             local expire = redis.call("PTTL", lockpoint);
             if expire <= 0 then expire = -1 end
 
+            --!debug_print("single_instance_lock readlock waits in the waitlist! duration: " .. expire)
             return expire
         end
 
@@ -145,6 +161,7 @@ else -- Lock failed
         if (first_attempt == 1) and (is_fair == 1) then
             redis.call("RPUSH", lockwait, client_lock_id)
             redis.call("PEXPIRE", lockwait, lockwait_lease_time)  -- extend the expiration time
+            --!debug_print("single_instance_lock writelock waits in the waitlist!")
         end
 
         -- Get expiration time

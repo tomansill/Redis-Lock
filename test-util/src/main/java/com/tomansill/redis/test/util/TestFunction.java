@@ -13,6 +13,346 @@ public class TestFunction {
 
     private TestFunction(){} // Prevents instantiation
 
+	public static boolean performSimpleWriteLock(final ReadWriteLock rwl, final long max_time_out, final TimeUnit unit, final boolean debug){
+
+		// Create executor service
+		ExecutorService es = Executors.newCachedThreadPool();
+
+		// Sensitive data
+		final SensitiveData data = new SensitiveData();
+
+		// CDL
+		final ResetableCountDownLatch jobs = new ResetableCountDownLatch(2);
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(1);
+
+		// Set up future
+		Future<Boolean> main_future = es.submit(() -> {
+
+			try{
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.writeLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Tell other threads to go ahead and lock
+				rcdl.countDown();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+
+		// Set up future
+		Future<Boolean> write_future = es.submit(() -> {
+			try{
+
+				// Wait for main to lock
+				rcdl.await();
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.writeLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+
+		/*
+		// Set up future
+		Future<Boolean> read_future = es.submit(() -> {
+			try{
+
+				// Wait for main to lock
+				rcdl.await();
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.readLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Read
+				data.read(1, TimeUnit.SECONDS);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+		*/
+
+		// Run it and await for result
+		try{
+			if(!jobs.await(max_time_out, unit)){
+				if(debug) System.err.println("Test Timed out");
+				return false;
+			}
+			if(!main_future.isDone() || !main_future.get()) return false;
+			if(!write_future.isDone() || !main_future.get()) return false;
+			//if(!read_future.get(max_time_out, unit)) return false;
+		}catch(InterruptedException | ExecutionException e){
+			if(debug) System.err.println("Test Timed out");
+			return false;
+		}
+
+    	return !data.isCorrupted();
+	}
+
+	public static boolean performSimpleReadLock(final ReadWriteLock rwl, final long max_time_out, final TimeUnit unit, final boolean debug){
+
+		// Create executor service
+		ExecutorService es = Executors.newCachedThreadPool();
+
+		// Sensitive data
+		final SensitiveData data = new SensitiveData();
+
+		// CDL
+		final ResetableCountDownLatch jobs = new ResetableCountDownLatch(3);
+		final ResetableCountDownLatch rcdl = new ResetableCountDownLatch(1);
+
+		// Set up future
+		Future<Boolean> first_write_future = es.submit(() -> {
+			try{
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.writeLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Tell other threads to go ahead and lock
+				rcdl.countDown();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+
+		// Set up runnable
+		Callable<Boolean> second_callable = () -> {
+			try{
+
+				// Wait for main to lock
+				rcdl.await();
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.readLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		};
+
+		// Set up future
+		Future<Boolean> first_read_lock1 = es.submit(second_callable);
+		Future<Boolean> first_read_lock2 = es.submit(second_callable);
+
+
+		// Run it and await for result
+		try{
+			if(!jobs.await(max_time_out, unit)){
+				if(debug) System.err.println("Test Timed out");
+				return false;
+			}
+			if(!first_write_future.isDone() || !first_write_future.get()) return false;
+			if(!first_read_lock1.isDone() || !first_read_lock1.get()) return false;
+			if(!first_read_lock2.isDone() || !first_read_lock2.get()) return false;
+		}catch(InterruptedException | ExecutionException e){
+			if(debug) System.err.println("Test Timed out");
+			return false;
+		}
+
+		// Check if data is still good
+		if(data.isCorrupted()) return false;
+
+		// Reset
+		jobs.reset(4);
+		rcdl.reset(1);
+		ResetableCountDownLatch rcdl1 = new ResetableCountDownLatch(1);
+
+		// Create read future
+		Callable<Boolean> second_read_callable = () -> {
+			try{
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.readLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Tell other threads to go ahead and lock
+				rcdl.countDown();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Tell that third readlock to lock
+				rcdl1.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		};
+		Future<Boolean> second_read_future1 = es.submit(second_read_callable);
+		Future<Boolean> second_read_future2 = es.submit(second_read_callable);
+
+		// Set up future
+		Future<Boolean> second_write_future = es.submit(() -> {
+			try{
+
+				// Wait for main to lock
+				rcdl.await();
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.writeLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+
+		// Set up future
+		Future<Boolean> third_read_future = es.submit(() -> {
+			try{
+
+				// Wait for main to unlock
+				rcdl1.await();
+
+				// Get lock
+				Lock lock = rwl != null ? rwl.readLock() : null;
+
+				// Lock it
+				if(lock != null) lock.lock();
+
+				// Manipulate
+				data.set(1, TimeUnit.SECONDS, debug);
+
+				// Unlock
+				if(lock != null) lock.unlock();
+
+				// Mark job as complete
+				jobs.countDown();
+
+				// Exit
+				return true;
+
+			}catch(Exception e){
+				e.printStackTrace();
+				return false;
+			}
+		});
+
+		// Run it and await for result
+		try{
+			if(!jobs.await(max_time_out, unit)){
+				if(debug) System.err.println("Test Timed out");
+				return false;
+			}
+			if(!second_read_future1.isDone() || !second_read_future1.get()) return false;
+			if(!second_read_future2.isDone() || !second_read_future2.get()) return false;
+			if(!second_write_future.isDone() || !second_write_future.get()) return false;
+			if(!third_read_future.isDone() || !third_read_future.get()) return false;
+
+		}catch(InterruptedException | ExecutionException e){
+			if(debug) System.err.println("Test Timed out");
+			return false;
+		}
+
+		return !data.isCorrupted();
+	}
+
     public static boolean performMultipleFairLock(final ReadWriteLock rwl, final int num_threads, final boolean debug) {
         return performMultipleFairLock(rwl, num_threads, 0, null, debug);
     }

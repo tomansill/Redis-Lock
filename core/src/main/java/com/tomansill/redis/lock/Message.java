@@ -48,14 +48,14 @@ class Message{
 			// If FREE, OPEN, or SHARED message, then scan all and return message
 			if(type == Type.FREE || type == Type.SHARED || type == Type.OPEN){
 				if(message.indexOf(":", 2) != -1) return null;
-				return new Message(type, null, null, message.substring(3), -1);
+				return new Message(type, null, null, message.substring(2), -1);
 			}
 
 			// Get first semicolon
 			int first_semi = message.indexOf(":", 2);
 
 			// Client id
-			String client_id = message.substring(3, first_semi);
+			String client_id = message.substring(2, first_semi);
 
 			// Get second semicolon
 			int second_semi = message.indexOf(":", first_semi + 1);
