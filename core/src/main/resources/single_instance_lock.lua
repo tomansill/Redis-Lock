@@ -110,7 +110,7 @@ if (not result) or (result == "dead") then -- Cleared to lock
     return 0 -- 0 means success
 
 else -- Lock failed
-    --!debug_print("single_instance_lock failed to lock!")
+    --debug_print("single_instance_lock failed to lock! " .. result)
 
     -- If trylock, return immediately
     if trylock == 1 then return -1 end
@@ -156,6 +156,8 @@ else -- Lock failed
         end
 
     else -- Writelocks
+
+        --!debug_print("single_instance_lock Failed to obtain a lock!")
 
         -- Enqueue in lockwait
         if (first_attempt == 1) and (is_fair == 1) then

@@ -77,7 +77,7 @@ public class JedisPubSubManager{
 
 			// Kill the thread if nothing is subscribed
 			if(this.channel_function_map.isEmpty()){
-				this.pubsub.unsubscribe();
+				if(this.pubsub.isSubscribed()) this.pubsub.unsubscribe();
 				this.pubsub = null;
 			}
 		}finally{

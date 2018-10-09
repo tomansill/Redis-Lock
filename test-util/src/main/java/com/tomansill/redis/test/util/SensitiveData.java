@@ -49,7 +49,13 @@ public class SensitiveData {
 	        counter.getAndIncrement();
 	        this.write.set(false);
         }else{
-            if(!quiet) System.out.println("Corrupted!");
+            if(!quiet){
+                System.out.println("Corrupted!");
+                StackTraceElement[] ste = Thread.currentThread().getStackTrace();
+                for(StackTraceElement element : ste){
+                    System.out.println(element);
+                }
+            }
             this.corrupted = true;
         }
     }

@@ -4,12 +4,10 @@ import com.tomansill.redis.lock.TestMultiInstance;
 import com.tomansill.redis.lock.TestSingleInstance;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
-@Ignore
 public class TestJedisLockClient {
 
     private final static int INSTANCE_NUMBER = 3;
@@ -36,8 +34,8 @@ public class TestJedisLockClient {
         TestMultiInstance.setUp(clients);
 
         // For profiler
-        System.out.println("Waiting 10 seconds...");
-	    Thread.sleep(10000);
+        //System.out.println("Waiting 10 seconds...");
+	    //Thread.sleep(10000);
     }
 
     @AfterClass

@@ -191,8 +191,10 @@ public class TestFunction {
 				// Lock it
 				if(lock != null) lock.lock();
 
-				// Manipulate
-				data.set(1, TimeUnit.SECONDS, debug);
+				System.out.println("Allowed!");
+
+				// Read
+				data.read(1, TimeUnit.SECONDS);
 
 				// Unlock
 				if(lock != null) lock.unlock();
@@ -250,7 +252,7 @@ public class TestFunction {
 				rcdl.countDown();
 
 				// Manipulate
-				data.set(1, TimeUnit.SECONDS, debug);
+				data.read(1, TimeUnit.SECONDS);
 
 				// Unlock
 				if(lock != null) lock.unlock();

@@ -80,10 +80,12 @@ public abstract class AbstractRedisLockClient{
 	 */
 	private final Timer timer = new Timer();
 	private final ConcurrentHashMap<String, TimerTask> lockpoint_to_timer = new ConcurrentHashMap<>();
+
 	/**
 	 * Prefix
 	 */
 	private final String prefix;
+
 	/** Debug */
 	private final boolean debug = true;
 	private boolean listening = false;
@@ -478,6 +480,19 @@ public abstract class AbstractRedisLockClient{
 			final long lock_lease_time
 	){
 
+		/*
+		System.out.println(
+				"performSingleMasterLock(lockpoint=" + lockpoint
+				+ "\t lock_id=" + lock_id
+				+ "\t is_read_lock=" + is_read_lock
+				+ "\t try_lock=" + try_lock
+				+ "\t is_fair=" + is_fair
+				+ "\t first_attempt=" + first_attempt
+				+ "\t unit=" + unit
+				+ "\t lock_lease_time=" + lock_lease_time
+				+ ")"
+		);*/
+
 		// Get TimeUnit
 		TimeUnit ms_unit = TimeUnit.MILLISECONDS;
 
@@ -575,7 +590,7 @@ public abstract class AbstractRedisLockClient{
 			final long lock_lease_time
 	) throws InterruptedException{
 
-		//System.out.println("performLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ", try_lock=" + try_lock + ")");
+		//System.out.println("performLock(lockpoint=" + lockpoint + ", lock_id=" + lock_id + ", is_read_lock=" + is_read_lock + ", is_fair=" + is_fair + ", time_out=" + time_out + ", unit=" + unit + " lock_lease_time=" + lock_lease_time + ", try_lock=" + try_lock + ")");
 
 		long actual_lease_time = (lock_lease_time < 1 ? getLeaseDuration(unit) : lock_lease_time);
 		boolean result;
@@ -660,11 +675,13 @@ public abstract class AbstractRedisLockClient{
 
 	private void processMessage(final String message){
 
-		System.out.println("processMessage(message=" + message + ")");
+		//System.out.println("processMessage(message=" + message + ")");
 
 		Message notification_message = Message.interpret(message);
 
 		if(notification_message == null) return;
+
+		System.out.println("processMessage - message: " + notification_message);
 
 		if(notification_message.type == Message.Type.FREE){
 
@@ -702,8 +719,13 @@ public abstract class AbstractRedisLockClient{
 
 			// Fire all cdls
 			synchronized(this.shared_locks_set_map){
+				System.out.println("Shared locks: " + set);
 				for(String lock_id : set){
-					this.lock_to_cdl_map.get(lock_id).countDown();
+					CountDownLatch cdl = this.lock_to_cdl_map.get(lock_id);
+					if(cdl != null) cdl.countDown();
+					else{
+						System.err.println("panic 9 - " + lock_id);
+					}
 				}
 			}
 		}else if(notification_message.type == Message.Type.UNLOCK){
@@ -711,7 +733,7 @@ public abstract class AbstractRedisLockClient{
 			System.out.println("UNLOCK ");
 
 			// Make sure message is meant for this client
-			if(notification_message.client_id.equals(client_id)){
+			if(client_id.equals(notification_message.client_id)){
 
 				// Check whose lock id this is for
 				CountDownLatch cdl = this.lock_to_cdl_map.get(notification_message.lock_id);
@@ -725,6 +747,7 @@ public abstract class AbstractRedisLockClient{
 
 				// Count down
 				cdl.countDown();
+
 			}else{
 				// TODO refire?
 				System.err.println("panic 8  " + notification_message.client_id);

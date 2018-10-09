@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import java.util.Arrays;
+
 class Message{
 
 	/** enum **/
@@ -29,7 +31,64 @@ class Message{
 		this.lease_time = lease_time;
 	}
 
-	static Message interpret(final String message){
+	static Message interpret(final String message) {
+
+		System.out.println("interpret(message=" + (message == null ? "null" : "'" + message + "'") + ")");
+
+		// Ignore if empty
+		if (message == null || message.trim().isEmpty()) return null;
+
+		// Split string
+		String[] tokens = message.trim().split(":");
+
+		System.out.println("tokenized: " + Arrays.toString(tokens));
+
+		// Switch on token length
+		if(tokens.length == 2){
+
+			// Most likely FREE, OPEN, SHARED, ... or invalid message, find out which one
+			Type type;
+			switch(tokens[0].trim()){
+				case "#":
+					type = Type.FREE;
+					break;
+				case "o":
+					type = Type.OPEN;
+					break;
+				case "s":
+					type = Type.SHARED;
+					break;
+				default: return null; // Invalid message
+			}
+
+			// Return the message
+			return new Message(type, null, null, tokens[1].trim(), -1);
+
+		}else if(tokens.length == 3){
+
+			// Check if correct tag
+			if(!tokens[0].trim().equals("u")) return null;
+
+			// Return message
+			return new Message(Type.UNLOCK, null, null, tokens[2].trim(), -1);
+
+		}else if(tokens.length == 5){
+
+			// Check if correct tag
+			if(!tokens[0].trim().equals("l")) return null;
+
+			try{
+				return new Message(Type.LOCK, tokens[1].trim(), tokens[2].trim(), tokens[4].trim(), Long.parseLong(tokens[3]));
+			}catch(NumberFormatException ignored){
+				return null;
+			}
+		}
+
+		// If arrived here, then the message is invalid
+		return null;
+	}
+
+	static Message interpret1(final String message){
 		if(message == null || message.isEmpty()) return null;
 
 		try{
@@ -41,6 +100,8 @@ class Message{
 			else if(message.charAt(0) == 'o') type = Type.OPEN;
 			else if(message.charAt(0) == '#') type = Type.FREE;
 			else return null;
+
+			System.out.println("type=" + type);
 
 			// Check the semicolon after type
 			if(message.charAt(1) != ':') return null;
@@ -87,5 +148,9 @@ class Message{
 		}catch(IndexOutOfBoundsException | NumberFormatException ignored){
 			return null;
 		}
+	}
+
+	public String toString(){
+		return "Message(type=" + type + ", client_id=" + client_id + ", lock_id=" + lock_id + ", lockpoint=" + lockpoint + ", lease_time=" + lease_time + ")";
 	}
 }

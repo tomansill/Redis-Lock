@@ -12,8 +12,7 @@ debug_msg = debug_msg .. "\n\t lockpoint='" .. KEYS[1] .. "'"
 debug_msg = debug_msg .. "\n\t is_read_lock='" .. KEYS[2] .. "'"
 debug_msg = debug_msg .. "\n\t prefix='" .. KEYS[3] .. "'"
 debug_msg = debug_msg .. "\n\t is_owner='" .. KEYS[4] .. "'"
---debug_print(debug_msg)
-debug_print("single_instance_unlock")
+debug_print(debug_msg)
 --!end
 
 -- Initialization
@@ -62,11 +61,13 @@ redis.call("DEL", lockpoint)
 -- Get from lockwait (no pop)
 local element = redis.call("LINDEX", lockwait, 0)
 
+--debug_print("element: " .. element)
+
 -- If empty, either nobody is waiting on queue or there's unfair locks waiting for it
 if(not element) then
     element = "#" .. ":" .. KEYS[1]
 else
-    if(element == 's') then
+    if(element == 'S') then
         element = "s:" .. KEYS[1]
     else
         element = "u:" .. element .. ":" .. KEYS[1]

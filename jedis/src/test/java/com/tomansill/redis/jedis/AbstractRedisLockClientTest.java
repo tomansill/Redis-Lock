@@ -30,7 +30,7 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		client.subscribe(channel, s -> {
-			System.out.println("Fired!");
+			//System.out.println("Fired!");
 			ref.set(message);
 			cdl1.countDown();
 		});
@@ -40,8 +40,8 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		jedis.publish(channel, message);
-		System.out.println("published");
-		System.out.flush();
+		//System.out.println("published");
+		//System.out.flush();
 
 		// Await
 		cdl1.await(2, TimeUnit.SECONDS);
@@ -67,14 +67,14 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		client.subscribe(channel, s -> {
-			System.out.println("Fired!");
+			//System.out.println("Fired!");
 			ref1.set(message);
 			cdl1.countDown();
 		});
 
 		// Fire it
 		client.subscribe(channel + "1", s -> {
-			System.out.println("Fired!");
+			//System.out.println("Fired!");
 			ref2.set(message + "1");
 			cdl1.countDown();
 		});
@@ -86,8 +86,8 @@ public class AbstractRedisLockClientTest{
 		// Fire it
 		jedis.publish(channel, message);
 		jedis.publish(channel + "1", message);
-		System.out.println("published");
-		System.out.flush();
+		//System.out.println("published");
+		//System.out.flush();
 
 		// Await
 		cdl1.await(2, TimeUnit.SECONDS);
@@ -114,7 +114,7 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		client.subscribe(channel1, s -> {
-			System.out.println("Fired!");
+			//System.out.println("Fired!");
 			ref.set(message1);
 			cdl.get().countDown();
 		});
@@ -124,8 +124,8 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		jedis.publish(channel1, message1);
-		System.out.println("published");
-		System.out.flush();
+		//System.out.println("published");
+		//System.out.flush();
 
 		// Await
 		cdl.get().await(2, TimeUnit.SECONDS);
@@ -142,15 +142,15 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		client.subscribe(channel2, s -> {
-			System.out.println("Fired!");
+			//System.out.println("Fired!");
 			ref.set(message2);
 			cdl2.countDown();
 		});
 
 		// Fire it
 		jedis.publish(channel2, message2);
-		System.out.println("published");
-		System.out.flush();
+		//System.out.println("published");
+		//System.out.flush();
 
 		// Await
 		cdl2.await(2, TimeUnit.SECONDS);
@@ -166,8 +166,8 @@ public class AbstractRedisLockClientTest{
 
 		// Fire it
 		jedis.publish(channel1, message1);
-		System.out.println("published");
-		System.out.flush();
+		//System.out.println("published");
+		//System.out.flush();
 
 		// Await
 		cdl.get().await(2, TimeUnit.SECONDS);

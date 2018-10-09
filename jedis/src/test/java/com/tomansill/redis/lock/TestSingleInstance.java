@@ -57,7 +57,7 @@ public class TestSingleInstance{
 		if(debug) System.out.println("Doing unfair experiment test");
 		time = System.nanoTime();
 		assertTrue(
-				"The unfair experiment test has failed.",
+				"The experiment test has failed.",
 				TestFunction.performSimpleWriteLock(client.getLock(Utility.generateRandomString(8), fair),
 				                                    timeout,
 				                                    unit,
@@ -73,7 +73,7 @@ public class TestSingleInstance{
 		assumeTrue("We are not connected to Redis server, this test cannot continue.", client != null);
 
 		// Set timeout duration
-		long timeout = 10;
+		long timeout = 20;
 		TimeUnit unit = TimeUnit.SECONDS;
 
 		// Do control test
