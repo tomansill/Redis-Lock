@@ -2,50 +2,82 @@ package com.tomansill.redis.lock;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPubSub;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.net.SocketException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-public class JedisPubSubManager{
+public class JedisPubSubManager implements AutoCloseable{
 
 	private final Jedis connection;
 
-	private final Map<String, Consumer<String>> channel_function_map = new HashMap<>();
+	private final ConcurrentHashMap<String, Consumer<String>> channel_function_map = new ConcurrentHashMap<>();
 
-	private CustomPubSub pubsub = null;
+	private PubSub pubsub = null;
 
-	private final ReentrantReadWriteLock rrwl = new ReentrantReadWriteLock();
+	private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock(true);
+
+	private boolean closed = false;
 
 	public JedisPubSubManager(final Jedis jedis){
 		this.connection = jedis;
 	}
 
-	public void subscribe(final String channel, final Consumer<String> function){
+	public boolean subscribe(final String channel, final Consumer<String> function){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
 		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
 		if(function == null) throw new IllegalArgumentException("function is null");
 
-		Lock lock = rrwl.writeLock();
+		boolean old_found = false;
+
+		// Lock it
+		Lock lock = this.rwl.writeLock();
 		lock.lock();
 		try{
-			// Add in the map
+
+			// Assert that this manager is still open
+			if(closed) throw new IllegalStateException("JedisPubSubManager is closed");
+
+			// Check if already subscribing
+			if(this.channel_function_map.containsKey(channel)){
+
+				// Unsubscribe
+				this.unsubscribeWithoutLock(channel);
+
+				// Remove old channel
+				this.channel_function_map.remove(channel);
+
+				// Set flag
+				old_found = true;
+			}
+
+			// Add it
 			this.channel_function_map.put(channel, function);
 
-			// Subscribe if listener already exists
-			if(this.pubsub != null) this.pubsub.subscribe(channel);
+			// If pubsub is not running, create new and run it, otherwise add to existing pubsub
+			if(this.pubsub == null){
 
-			else{
+				// Create pubsub
+				this.pubsub = new PubSub();
 
-				// Create new listener
-				this.pubsub = new CustomPubSub();
+				// Run it (subscribe is a blocking function so new thread is needed)
+				new Thread(() -> {
+					try{
+						this.connection.subscribe(this.pubsub, channel);
+					}catch(JedisConnectionException e){
+						if(e.getCause() instanceof SocketException) closed = true;
+					}catch(ClassCastException e){
+						// We can safely ignore this, I think this is Jedis error with socket being closed
+						// TODO on future versions
+						closed = true;
+					}
+				}).start();
 
-				// Fire it
-				new Thread(() -> connection.subscribe(pubsub, channel)).start();
 
 				// No other way to find out if listener is ready for receiving without polling the listener
 				while(!this.pubsub.isSubscribed()){
@@ -54,71 +86,123 @@ public class JedisPubSubManager{
 					}catch(InterruptedException ignored){
 					}
 				}
+
+			}else{
+				this.pubsub.subscribe(channel);
 			}
+
 		}finally{
 			lock.unlock();
 		}
+
+		return old_found;
 	}
 
-	public void unsubscribe(final String channel){
-		this.unsubscribe(channel, true);
-	}
-
-	private void unsubscribe(final String channel, final boolean do_lock){
-
-		// Check input
-		if(channel == null) throw new IllegalArgumentException("channel is null");
-		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
-
-		Lock lock = rrwl.writeLock();
-		if(do_lock) lock.lock();
-		try{
-			// Unsubscribe
-			this.pubsub.unsubscribe(channel);
-			this.channel_function_map.remove(channel);
-
-			// Kill the thread if nothing is subscribed
-			if(this.channel_function_map.isEmpty()){
-				if(this.pubsub.isSubscribed()){
-					try{
-						this.pubsub.unsubscribe();
-					}catch(NullPointerException ignored){
-						// Apparently jedis unsubscribe is not thread safe?
-					}
-				}
-				this.pubsub = null;
-			}
-		}finally{
-			if(do_lock) lock.unlock();
-		}
-	}
-
-	public void unsubscribeAll(){
-		Lock lock = rrwl.writeLock();
+	public boolean unsubscribe(final String channel){
+		Lock lock = this.rwl.writeLock();
 		lock.lock();
 		try{
-			for(String channel : this.channel_function_map.keySet()) this.unsubscribe(channel, false);
+			return this.unsubscribeWithoutLock(channel);
 		}finally{
 			lock.unlock();
 		}
 	}
 
-	private class CustomPubSub extends JedisPubSub{
+	private boolean unsubscribeWithoutLock(final String channel){
+
+		// Check if closed
+		if(this.closed) return false;
+
+		// Check if channel exists (and remove it if it exists)
+		if(this.channel_function_map.remove(channel) == null) return false;
+
+		// Skip if somehow already unsubscribe TODO validity of this statement
+		if(this.pubsub == null) return true;
+
+		// Unsubscribe
+		this.pubsub.unsubscribe(channel);
+
+		// Stop the pubsub if all empty
+		if(!this.channel_function_map.isEmpty()) return true;
+
+		// Nullify it (to kill it fully) TODO validtiy of this statement
+		this.pubsub = null;
+
+		// Exit
+		return true;
+	}
+
+	private void unsubscribeAllWithoutLock(){
+		// Check if closed
+		if(this.closed) return;
+
+		// Loop all
+		for(String channel : this.channel_function_map.keySet()){
+			this.unsubscribe(channel);
+		}
+	}
+
+	public synchronized void unsubscribeAll(){
+		Lock lock = this.rwl.writeLock();
+		lock.lock();
+		try{
+			this.unsubscribeAllWithoutLock();
+		}finally{
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public void close(){
+
+		// Lock it
+		Lock lock = this.rwl.writeLock();
+		lock.lock();
+		try{
+
+			// Close it
+			closed = true;
+
+			// Unsubscribe all
+			this.unsubscribeAllWithoutLock();
+
+			// Close connection
+			this.connection.close();
+
+		}finally{
+
+			// Unlock it
+			lock.unlock();
+		}
+
+	}
+
+	private class PubSub extends JedisPubSub{
 		@Override
 		public void onMessage(final String channel, final String message){
 
 			// If null, ignore
 			if(channel == null) return;
 
-			// Get consumer function
-			Consumer<String> function = channel_function_map.get(channel);
+			// Lock it
+			Lock lock = rwl.readLock();
+			lock.lock();
+			try{
 
-			// If not null, run the function
-			if(function != null) function.accept(message);
+				// Get function
+				Consumer<String> function = channel_function_map.get(channel);
 
-				// If consumer function is null, then channel name itself is unrecognized by this pubsub
-			else{
-				System.err.println("Unrecognized channel name '" + channel + "' showed up in PubSub onMessage method");
+				// Error on unrecognized function
+				if(function == null){
+					System.err.println("Unrecognized channel name '" + channel + "' showed up in PubSub onMessage method");
+					return;
+				}
+
+				// Run function
+				function.accept(message);
+
+			}finally{
+				lock.unlock();
 			}
 		}
 	}

@@ -24,8 +24,8 @@ debug_msg = debug_msg .. "\n\t lockwait_lease='" .. KEYS[7] .. "'"
 debug_msg = debug_msg .. "\n\t is_read='" .. KEYS[8] .. "'"
 debug_msg = debug_msg .. "\n\t prefix='" .. KEYS[9] .. "'"
 debug_msg = debug_msg .. "\n\t trylock='" .. KEYS[10] .. "'"
-debug_print(debug_msg)
---debug_print("single_instance_lock")
+--!debug_print(debug_msg)
+--!debug_print("single_instance_lock")
 --!end
 
 -- Initialization

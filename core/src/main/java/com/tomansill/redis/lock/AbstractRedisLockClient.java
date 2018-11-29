@@ -214,7 +214,7 @@ public abstract class AbstractRedisLockClient{
 							.getMessage());
 				}
 
-				//System.out.println("script: \n" + sb.toString());
+				System.out.println("script: \n" + sb.toString());
 
 				// Add it to the script
 				SCRIPT_NAME_TO_SCRIPTS.put(filename, sb.toString());

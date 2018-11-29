@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import com.tomansill.redis.jedis.JedisPubSubManager;
+import com.tomansill.redis.test.util.ResetableCountDownLatch;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,13 +43,9 @@ public class TestScripts{
 
 	private static final BlockingQueue<String> PUBSUB = new LinkedBlockingQueue<>();
 
-	private static JedisPubSub pubsub;
+	private static final ResetableCountDownLatch cdl = new ResetableCountDownLatch(1);
 
-	private static Jedis pubsub_listener;
-
-	private static CountDownLatch cdl;
-
-	private static CountDownLatch pubsub_close_controller = new CountDownLatch(1);
+	private static JedisPubSubManager pubsub;
 
 	@Before
 	public void setUp(){
@@ -71,6 +69,7 @@ public class TestScripts{
 			try(BufferedReader br = new BufferedReader(new FileReader(file))){
 				String line;
 				while((line = br.readLine()) != null){
+
 					sb.append(line);
 					sb.append('\n');
 				}
@@ -86,38 +85,35 @@ public class TestScripts{
 		pool = new JedisPool(new JedisPoolConfig(), HOSTNAME, PORT);
 
 		// Set up pubsub
-		pubsub_listener = pool.getResource();
-		pubsub = new JedisPubSub(){
-			@Override
-			public void onMessage(String channel, String message){
-				super.onMessage(channel, message);
-				PUBSUB.offer(message);
-				if(cdl != null) cdl.countDown();
-			}
-
-			@Override
-			public void unsubscribe(){
-				super.unsubscribe();
-				pubsub_close_controller.countDown();
-			}
-		};
-
-		// Fire it
-		new Thread(() -> {
-			try{
-				pubsub_listener.subscribe(pubsub, "lockchannel");
-			}catch(JedisConnectionException ignored){
-			}
-		}).start();
+		Jedis pubsub_listener = pool.getResource();
+		pubsub = new JedisPubSubManager(pubsub_listener);
+		/*
+		pubsub.subscribe("lockchannel", (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
+		*/
 	}
 
 	@After
-	public void tearDown() throws InterruptedException{
-		//if(pubsub != null) pubsub.unsubscribe("lockchannel");
-		if(pubsub != null) pubsub.unsubscribe();
-		if(pubsub_close_controller != null) pubsub_close_controller.await();
-		if(pubsub_listener != null) pubsub_listener.close();
-		if(pool != null) pool.close();
+	public void tearDown(){
+		if(pubsub != null){
+			pubsub.close();
+			pubsub = null;
+		}
+		/*
+		if(pubsub != null){
+			pubsub.unsubscribeAll();
+			pubsub = null;
+		}
+		if(pubsub_listener != null){
+			pubsub_listener.close();
+			pubsub_listener = null;
+		}*/
+		if(pool != null){
+			pool.close();
+			pool = null;
+		}
 	}
 
 	@Test
@@ -138,6 +134,12 @@ public class TestScripts{
 		// Create a random key
 		String key = Utility.generateRandomString(8);
 
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
+
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
 
@@ -146,11 +148,11 @@ public class TestScripts{
 				String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
 				// Do a simple successful unfair lock that should always succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				Object ret_val = jedis.evalsha(script_hash, 10, key, "client1", "one", "0", "0", VERY_LONG_TIMEOUT + "", VERY_LONG_TIMEOUT + "", "0", "", "0");
 				assertTrue("Return value is not an integer! value: " + ret_val, ret_val instanceof Long);
 				assertEquals("Return value is not zero!", 0, ((Long) ret_val).longValue());
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -170,7 +172,7 @@ public class TestScripts{
 				assertFalse("lockcount should not exist", jedis.exists("lockcount:" + key));
 
 				// Do unfair lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -185,6 +187,7 @@ public class TestScripts{
 			}finally{
 				jedis.del("lockpoint:" + key);
 				PUBSUB.clear();
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
@@ -197,6 +200,12 @@ public class TestScripts{
 		// Create a random key
 		String key = Utility.generateRandomString(8);
 
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
+
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
 
@@ -205,11 +214,11 @@ public class TestScripts{
 				String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
 				// Do a simple successful fair lock that should always succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				Object ret_val = jedis.evalsha(script_hash, 10, key, "client1", "one", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -220,7 +229,7 @@ public class TestScripts{
 				assertEquals("Lockpoint value is not what expected", "unique", jedis.get("lockpoint:" + key));
 
 				// Do another fair lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -233,7 +242,7 @@ public class TestScripts{
 				assertEquals("Lockwait element doesn't contain the expected element", "client1:two", lockwait.get(0));
 
 				// Do another one
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				if(ret_val instanceof String){
 					ret_val = new Long((String) ret_val);
 				}
@@ -256,7 +265,7 @@ public class TestScripts{
 				assertEquals("PUBSUB is not empty! Value:" + PUBSUB, 0, PUBSUB.size());
 
 				// Do unfair lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -271,11 +280,11 @@ public class TestScripts{
 				jedis.del("lockpoint:" + key);
 
 				// Do unfair lock that should succeed (unfairly take the point)
-				cdl = new CountDownLatch(1);
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "five", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				cdl.reset(1);
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "five", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:five:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -289,7 +298,7 @@ public class TestScripts{
 				jedis.del("lockpoint:" + key);
 
 				// Do another fair lock that should fail (it should jump straight to queue)
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "six", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "six", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", -2, ((Long) ret_val).longValue());
 				//assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
@@ -310,6 +319,7 @@ public class TestScripts{
 				jedis.del("lockpoint:" + key);
 				jedis.del("lockwait:" + key);
 				PUBSUB.clear();
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
@@ -322,6 +332,12 @@ public class TestScripts{
 		// Create a random key
 		String key = Utility.generateRandomString(8);
 
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
+
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
 			try{
@@ -330,12 +346,12 @@ public class TestScripts{
 				String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
 				// Do a simple successful fair lock that should always succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				Object ret_val = jedis.evalsha(script_hash, 10, key, "client1", "one", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
-				assertEquals("Value from Pubsub is messed up", "s:client1:one:" + key, PUBSUB.poll());
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
+				assertEquals("Value from Pubsub is messed up", "o:" + key, PUBSUB.poll()); // TODO was 's' now o
 				assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll(MARGIN, TimeUnit.MILLISECONDS));
 
 				// Check lockpoint expiration date
@@ -348,11 +364,11 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do unfair read lock - it should succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
-				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), -3); // TODO was 0, now -3 because shared lock success
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:two:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -362,7 +378,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do unfair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -373,7 +389,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do fair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -388,11 +404,11 @@ public class TestScripts{
 				jedis.del("lockwait:" + key);
 
 				// Do unfair readlock - it should succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "three", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
-				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), -3); // TODO was 0, now -3 because shared lock success
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:three:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -402,7 +418,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do unfair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -413,7 +429,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do fair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -429,6 +445,7 @@ public class TestScripts{
 				jedis.del("lockpool:" + key);
 				jedis.del("lockcount:" + key);
 				PUBSUB.clear();
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
@@ -441,6 +458,12 @@ public class TestScripts{
 		// Create a random key
 		String key = Utility.generateRandomString(8);
 
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
+
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
 			try{
@@ -448,12 +471,12 @@ public class TestScripts{
 				String script_hash = jedis.scriptLoad(SCRIPT_NAME_TO_SCRIPTS.get("single_instance_lock"));
 
 				// Do a simple successful fair lock that should always succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				Object ret_val = jedis.evalsha(script_hash, 10, key, "client1", "one", "1", "0", VERY_LONG_TIMEOUT + "", VERY_LONG_TIMEOUT + "", "1", "", "0");
 				assertTrue("Return value is not an integer! value: " + ret_val, ret_val instanceof Long);
 				assertEquals("Return value is not zero!", 0, ((Long) ret_val).longValue());
-				cdl.await(10, TimeUnit.MILLISECONDS);
-				assertEquals("Value from Pubsub is messed up", "s:client1:one:" + key, PUBSUB.poll());
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
+				assertEquals("Value from Pubsub is messed up", "o:" + key, PUBSUB.poll()); // TODO was 's' now 'o'
 				assertEquals("Value from Pubsub is messed up", "l:client1:one:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll(MARGIN, TimeUnit.MILLISECONDS));
 
 				// Check lockpoint expiration date
@@ -468,7 +491,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do an unfair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -479,7 +502,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do a fair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -493,11 +516,11 @@ public class TestScripts{
 				jedis.del("lockwait:" + key);
 
 				// Do fair readlock - it should succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "four", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
-				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), -3); // TODO was 0, now -3 because shared lock success
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:four:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -506,11 +529,11 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do unfair readlock - it should succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "five", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
-				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), -3); // TODO was 0, now -3 because shared lock success
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:five:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -523,7 +546,7 @@ public class TestScripts{
 				jedis.pexpire("lockpoint:" + key, VERY_LONG_TIMEOUT); // TODO address this later?
 
 				// Do an unfair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "two", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -534,7 +557,7 @@ public class TestScripts{
 				assertFalse("lockpool should not exist", jedis.exists("lockpool:" + key));
 
 				// Do a fair write lock that should fail
-				ret_val = jedis.evalsha(script_hash, 9, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "");
+				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "three", "1", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "0", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
 				assertEquals("Return value does not match!", VERY_LONG_TIMEOUT - MARGIN, (Long) ret_val, MARGIN);
 				assertTrue("Return value is not positive integer! Value:" + ret_val, 0 < (Long) ret_val);
@@ -560,11 +583,11 @@ public class TestScripts{
 				assertTrue("lockwait should contain 'S'", new HashSet<>(jedis.lrange("lockwait:" + key, 0, -1)).contains("S"));
 
 				// Do unfair readlock - it should succeed
-				cdl = new CountDownLatch(1);
+				cdl.reset(1);
 				ret_val = jedis.evalsha(script_hash, 10, key, "client1", "seven", "0", "1", VERY_LONG_TIMEOUT + "", (VERY_LONG_TIMEOUT * 2) + "", "1", "", "0");
 				assertTrue("Return value is not an integer!", ret_val instanceof Long);
-				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), 0);
-				cdl.await(10, TimeUnit.MILLISECONDS);
+				assertEquals("Return value is not zero!", ((Long) ret_val).longValue(), -3);  // TODO was 0, now -3 because shared lock success
+				assertTrue("CDL timed out", cdl.await(10, TimeUnit.MILLISECONDS));
 				assertEquals("Pubsub seems messed up... Value: " + PUBSUB, 1, PUBSUB.size());
 				assertEquals("Value from Pubsub is messed up", "l:client1:seven:" + VERY_LONG_TIMEOUT + ":" + key, PUBSUB.poll());
 
@@ -578,6 +601,7 @@ public class TestScripts{
 				jedis.del("lockpool:" + key);
 				jedis.del("lockcount:" + key);
 				PUBSUB.clear();
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
@@ -589,6 +613,12 @@ public class TestScripts{
 
 		// Create a random key
 		String key = Utility.generateRandomString(8);
+
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -662,6 +692,7 @@ public class TestScripts{
 				jedis.del("lockpool:" + key);
 				jedis.del("lockcount:" + key);
 				PUBSUB.clear();
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
@@ -673,6 +704,12 @@ public class TestScripts{
 
 		// Create a random key
 		String key = Utility.generateRandomString(8);
+
+		// Subscribe
+		pubsub.subscribe("lockchannel:" + key, (message -> {
+			PUBSUB.add(message);
+			cdl.countDown();
+		}));
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -707,6 +744,7 @@ public class TestScripts{
 			}finally{
 				jedis.del("lockpoint:" + key);
 				jedis.del("lockwait:" + key);
+				pubsub.unsubscribe("lockchannel:" + key);
 			}
 		}
 	}
