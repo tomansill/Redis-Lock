@@ -1,5 +1,8 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -10,7 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /** Sensitive data object, used for testing concurrency mechanisms
  *  @author <a href="mailto:tom@ansill.com">Tom Ansill</a>
  */
-public class Utility{
+public final class Utility {
 
     private Utility(){} // Prevents instantiation
 
@@ -21,7 +24,8 @@ public class Utility{
      *  @param digest byte array
      *  @return hexidecimal string
      */
-    public static String toHex(final byte[] digest){
+    @Nonnull
+    public static String toHex(@Nonnull byte[] digest) {
         char[] mapping = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
         char[] new_str = new char[digest.length * 2];
         for(int i = 0; i < digest.length; i++){
@@ -36,7 +40,8 @@ public class Utility{
      *  @param length length of byte array
      *  @return byte array of random bytes
      */
-    public static byte[] generateRandomArray(final int length) throws ExceptionInInitializerError {
+    @Nonnull
+    public static byte[] generateRandomArray(@Nonnegative int length) throws ExceptionInInitializerError {
 
         if(RANDOM_SOURCE == null){
             RANDOM_SOURCE_LOCK.lock();
@@ -67,12 +72,13 @@ public class Utility{
      *  @param length length of string
      *  @return string of random characters in hexidecimal format
      */
-    public static String generateRandomString(final int length){
+    @Nonnull
+    public static String generateRandomString(@Nonnegative int length) {
         // Convert to hex and return it
         return Base64.getEncoder().encodeToString(generateRandomArray(3*length)).replace("/", "A").replace("+", "B").substring(0, length);
     }
 
-    public static <T> T checkValueForNull(final T value, final String variable_name){
+    public static <T> T checkValueForNull(@Nullable T value, @Nonnull String variable_name) {
     	if(value == null) throw new IllegalArgumentException(variable_name + " is null");
     	return value;
     }

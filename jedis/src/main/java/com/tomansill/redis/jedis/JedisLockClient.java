@@ -8,6 +8,8 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisDataException;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.function.Consumer;
 
 import static com.tomansill.redis.lock.Utility.checkValueForNull;
@@ -31,7 +33,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	 *  @param listener_jedis jedis connection for publish/subscribe listener. Do not reuse same connection for this
 	 *  @throws IllegalArgumentException thrown if any one of the arguments are invalid
 	 */
-	public JedisLockClient(final Jedis jedis, final Jedis listener_jedis) throws IllegalArgumentException{
+	public JedisLockClient(@Nonnull Jedis jedis, @Nonnull Jedis listener_jedis) throws IllegalArgumentException {
 		this("", jedis, listener_jedis);
 	}
 
@@ -41,12 +43,10 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	 *  @param listener_jedis jedis connection for publish/subscribe listener. Do not reuse same connection for this
 	 *  @throws IllegalArgumentException thrown if any one of the arguments are invalid
 	 */
-    public JedisLockClient(final String prefix, final Jedis jedis, final Jedis listener_jedis) throws IllegalArgumentException{
+	public JedisLockClient(@Nonnull String prefix, @Nonnull Jedis jedis, @Nonnull Jedis listener_jedis) throws IllegalArgumentException {
 		super(checkValueForNull(prefix, "prefix"));
 
         // Check parameter
-        if(jedis == null) throw new IllegalArgumentException("jedis is null");
-	    if(listener_jedis == null) throw new IllegalArgumentException("listener_jedis is null");
 	    if(jedis == listener_jedis) throw new IllegalArgumentException("jedis and listener_jedis are the same!");
 
 	    // Assign
@@ -58,7 +58,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	 *  @param pool jedis connection pool
 	 *  @throws IllegalArgumentException thrown if any one of the arguments are invalid
 	 */
-	public JedisLockClient(final JedisPool pool) throws IllegalArgumentException{
+	public JedisLockClient(@Nonnull JedisPool pool) throws IllegalArgumentException {
 		this("", pool);
 	}
 
@@ -67,11 +67,8 @@ public class JedisLockClient extends AbstractRedisLockClient {
 	 *  @param pool jedis connection pool
 	 *  @throws IllegalArgumentException thrown if any one of the arguments are invalid
 	 */
-    public JedisLockClient(final String prefix, final JedisPool pool) throws IllegalArgumentException{
+	public JedisLockClient(@Nonnull String prefix, @Nonnull JedisPool pool) throws IllegalArgumentException {
 	    super(checkValueForNull(prefix, "prefix"));
-
-	    // Check parameter
-        if(pool == null) throw new IllegalArgumentException("pool is null");
 
         // Assign
         this.pool = pool;
@@ -86,12 +83,85 @@ public class JedisLockClient extends AbstractRedisLockClient {
         return false;
     }
 
+	private static JedisDataException interpretException(@Nonnull JedisDataException exception, @Nullable String hash) throws ScriptHashErrorException, NoScriptFoundException {
+
+		System.out.println(exception.getMessage());
+
+		// Check if it's script error exception
+		String pattern = "ERR Error running script (call to f_";
+		int index = exception.getMessage().indexOf(pattern);
+		if (index != -1) {
+
+			// Get the end of offending script hash
+			int end = exception.getMessage().indexOf("):", index + pattern.length());
+			if (end == -1) throw exception;
+
+			// Get the offending script hash
+			String script_hash = exception.getMessage().substring(index + pattern.length(), end);
+
+			// Get the line number
+			String pattern2 = "@user_script:";
+			int temp = exception.getMessage().indexOf(pattern2, end);
+			if (temp == -1) throw exception;
+			end = exception.getMessage().indexOf(":", temp + pattern2.length());
+			String str_line_number = exception.getMessage().substring(temp + pattern2.length(), end);
+
+			// Check if it is a number
+			int line_number;
+			try {
+				line_number = Integer.parseInt(str_line_number);
+			} catch (NumberFormatException ignored) {
+				throw exception;
+			}
+
+			// Pick up the rest of message
+			String message = exception.getMessage().substring(temp + pattern2.length() + str_line_number.length() + ": @user_script:".length() + str_line_number.length() + ": ".length());
+
+			// Build and throw it exception
+			throw new ScriptHashErrorException(message.trim(), script_hash.trim(), line_number);
+		}
+
+		// Check if it's script error exception
+		pattern = "ERR Error compiling script (new function): user_script:";
+		index = exception.getMessage().indexOf(pattern);
+		if (index != -1) {
+
+			// Get the line number
+			int temp = exception.getMessage().indexOf(":", index + pattern.length());
+			if (temp == -1) throw exception;
+			String str_line_number = exception.getMessage().substring(index + pattern.length(), temp);
+
+			// Check if it is a number
+			int line_number;
+			try {
+				line_number = Integer.parseInt(str_line_number);
+			} catch (NumberFormatException ignored) {
+				throw exception;
+			}
+
+			// Pick up the rest of message
+			String message = exception.getMessage().substring(temp + ": ".length());
+
+			// Build and throw it exception
+			throw new ScriptHashErrorException(message.trim(), "", line_number);
+		}
+
+		// Check if it's script not found exception
+		pattern = "NOSCRIPT No matching script. Please use EVAL.";
+		index = exception.getMessage().indexOf(pattern);
+		if (index != -1) throw new NoScriptFoundException(hash);
+
+		// throw it out as we dont know it
+		return exception;
+	}
+
     /** Loads script on the server and retrieve SHA1 digest of script
      *  @param script Lua script
      *  @return SHA1 digest of script
      */
-    @Override
-    protected String scriptLoad(final String script) throws ScriptHashErrorException, NoScriptFoundException{
+	@Nonnull
+	@Override
+	protected String scriptLoad(@Nonnull String script) throws ScriptHashErrorException, NoScriptFoundException {
 
     	// Get Jedis connection
 	    Jedis jedis;
@@ -115,7 +185,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @throws InvalidTypeException thrown if script returns in wrong type
      */
     @Override
-    protected boolean booleanEval(final String hash, final String... args) throws InvalidTypeException,
+	protected boolean booleanEval(@Nonnull String hash, @Nonnull String... args) throws InvalidTypeException,
 		    ScriptHashErrorException,
 		    NoScriptFoundException{
 
@@ -165,7 +235,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @throws InvalidTypeException thrown if script returns in wrong type
      */
     @Override
-    protected long longEval(final String hash, final String... args) throws InvalidTypeException, ScriptHashErrorException, NoScriptFoundException{
+	protected long longEval(@Nonnull String hash, @Nonnull String... args) throws InvalidTypeException, ScriptHashErrorException, NoScriptFoundException {
 
     	//System.out.println("hash: " + hash + " args: " + Arrays.toString(args));
 
@@ -210,8 +280,9 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @return string
      *  @throws InvalidTypeException thrown if script returns in wrong type
      */
-    @Override
-    protected String stringEval(final String hash, final String... args) throws InvalidTypeException, ScriptHashErrorException, NoScriptFoundException{
+	@Nullable
+	@Override
+	protected String stringEval(@Nonnull String hash, @Nonnull String... args) throws InvalidTypeException, ScriptHashErrorException, NoScriptFoundException {
 
 	    // Get Jedis connection
 	    Jedis jedis;
@@ -250,7 +321,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @param function function to fire when new topic comes up
      */
     @Override
-    public void subscribe(final String channel, final Consumer<String> function){
+	public void subscribe(@Nonnull String channel, @Nonnull Consumer<String> function) {
 		this.pubsub_manager.subscribe(channel, function);
      }
 
@@ -258,75 +329,7 @@ public class JedisLockClient extends AbstractRedisLockClient {
      *  @param channel channel name
      */
     @Override
-    public void unsubscribe(final String channel){
+	public void unsubscribe(@Nonnull String channel) {
 	    this.pubsub_manager.unsubscribe(channel);
-    }
-
-    private static JedisDataException interpretException(JedisDataException exception, String hash) throws ScriptHashErrorException, NoScriptFoundException{
-
-    	System.out.println(exception.getMessage());
-
-    	// Check if it's script error exception
-    	String pattern = "ERR Error running script (call to f_";
-    	int index = exception.getMessage().indexOf(pattern);
-    	if(index != -1){
-
-    		// Get the end of offending script hash
-		    int end = exception.getMessage().indexOf("):", index + pattern.length());
-		    if(end == -1) throw exception;
-
-		    // Get the offending script hash
-		    String script_hash = exception.getMessage().substring(index + pattern.length(), end);
-
-		    // Get the line number
-		    String pattern2 = "@user_script:";
-		    int temp = exception.getMessage().indexOf(pattern2, end);
-		    if(temp == -1) throw exception;
-		    end = exception.getMessage().indexOf(":", temp + pattern2.length());
-		    String str_line_number = exception.getMessage().substring(temp + pattern2.length(), end);
-
-		    // Check if it is a number
-		    int line_number;
-		    try{
-		    	line_number = Integer.parseInt(str_line_number);
-		    }catch(NumberFormatException ignored){ throw exception; }
-
-		    // Pick up the rest of message
-		    String message = exception.getMessage().substring(temp + pattern2.length() + str_line_number.length() + ": @user_script:".length() + str_line_number.length() + ": ".length());
-
-		    // Build and throw it exception
-		    throw new ScriptHashErrorException(message.trim(), script_hash.trim(), line_number);
-	    }
-
-	    // Check if it's script error exception
-	    pattern = "ERR Error compiling script (new function): user_script:";
-    	index = exception.getMessage().indexOf(pattern);
-	    if(index != -1){
-
-		    // Get the line number
-		    int temp = exception.getMessage().indexOf(":", index + pattern.length());
-		    if(temp == -1) throw exception;
-		    String str_line_number = exception.getMessage().substring(index + pattern.length(), temp);
-
-		    // Check if it is a number
-		    int line_number;
-		    try{
-			    line_number = Integer.parseInt(str_line_number);
-		    }catch(NumberFormatException ignored){ throw exception; }
-
-		    // Pick up the rest of message
-		    String message = exception.getMessage().substring(temp + ": ".length());
-
-		    // Build and throw it exception
-		    throw new ScriptHashErrorException(message.trim(), "", line_number);
-	    }
-
-	    // Check if it's script not found exception
-	    pattern = "NOSCRIPT No matching script. Please use EVAL.";
-    	index = exception.getMessage().indexOf(pattern);
-	    if(index != -1) throw new NoScriptFoundException(hash);
-
-	    // throw it out as we dont know it
-	    return exception;
     }
 }

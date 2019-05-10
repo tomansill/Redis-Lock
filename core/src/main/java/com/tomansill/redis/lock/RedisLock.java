@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 
@@ -9,14 +11,14 @@ import java.util.concurrent.locks.Lock;
  */
 public interface RedisLock extends Lock{
 
-    public boolean isLocked();
+    boolean isLocked();
 
-    public void lock(TimeUnit unit, long lease_time);
+    void lock(@Nonnull TimeUnit unit, @Nonnegative long lease_time);
 
-    public void lockInterruptibly(TimeUnit unit, long lease_time) throws InterruptedException;
+    void lockInterruptibly(@Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException;
 
-    public boolean tryLock(TimeUnit unit, long lease_time);
+    boolean tryLock(@Nonnull TimeUnit unit, @Nonnegative long lease_time);
 
-    public boolean tryLock(long wait_time, TimeUnit unit, long lease_time) throws InterruptedException;
+    boolean tryLock(@Nonnegative long wait_time, @Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException;
 
 }

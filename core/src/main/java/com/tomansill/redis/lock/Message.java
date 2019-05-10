@@ -23,7 +23,7 @@ class Message{
 
 	final long lease_time;
 
-	private Message(final Type type, final String client_id, final String lock_id, final String lockpoint, final long lease_time){
+	private Message(Type type, String client_id, String lock_id, String lockpoint, long lease_time) {
 		this.type = type;
 		this.client_id = client_id;
 		this.lock_id = lock_id;
@@ -31,7 +31,7 @@ class Message{
 		this.lease_time = lease_time;
 	}
 
-	static Message interpret(final String message) {
+	static Message interpret(String message) {
 
 		System.out.println("interpret(message=" + (message == null ? "null" : "'" + message + "'") + ")");
 
@@ -88,7 +88,7 @@ class Message{
 		return null;
 	}
 
-	static Message interpret1(final String message){
+	static Message interpret1(String message) {
 		if(message == null || message.isEmpty()) return null;
 
 		try{

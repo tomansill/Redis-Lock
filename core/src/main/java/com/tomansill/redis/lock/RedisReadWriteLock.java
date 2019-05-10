@@ -1,5 +1,6 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnull;
 import java.util.concurrent.locks.ReadWriteLock;
 
 /** RedisReadWriteLock class
@@ -22,7 +23,7 @@ public class RedisReadWriteLock implements ReadWriteLock{
      *  @param client Redis client
      *  @throws IllegalArgumentException thrown when either lockpoint or client parameter is null
      */
-    RedisReadWriteLock(final String lockpoint, final AbstractRedisLockClient client){
+    RedisReadWriteLock(@Nonnull String lockpoint, @Nonnull AbstractRedisLockClient client) {
         this(lockpoint, client, false);
     }
 
@@ -33,15 +34,7 @@ public class RedisReadWriteLock implements ReadWriteLock{
      *  @throws IllegalArgumentException thrown when either lockpoint or client parameter is null
      *  @throws UnsupportedOperationException thrown when the given AbstractRedisLockClient instance does not support this fairness policy
      */
-    RedisReadWriteLock(final String lockpoint, final AbstractRedisLockClient client, final boolean is_fair){
-
-        // Check parameters
-        if(lockpoint == null){
-            throw new IllegalArgumentException("'lockpoint' parameter in RedisReadWriteLock(String, AbstractRedisLockClient, boolean) is null");
-        }
-        if(client == null){
-            throw new IllegalArgumentException("'client' parameter in RedisReadWriteLock(String, AbstractRedisLockClient, boolean) is null");
-        }
+    RedisReadWriteLock(@Nonnull String lockpoint, @Nonnull AbstractRedisLockClient client, boolean is_fair) {
 
         // Assign parameters to class variables
         this.lockpoint = lockpoint;

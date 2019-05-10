@@ -1,5 +1,8 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
@@ -10,7 +13,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @param rrwl Parent RedisReadWriteLock instance
      *  @throws IllegalArgumentException thrown when rrwl is null
      */
-    SingleNodeWriteLock(final RedisReadWriteLock rrwl){
+    SingleNodeWriteLock(@Nonnull RedisReadWriteLock rrwl) {
         super(rrwl);
     }
 
@@ -29,10 +32,9 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws IllegalArgumentException thrown if unit or lease_time is invalid
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
      */
-    public void lock(final TimeUnit unit, final long lease_time) throws IllegalArgumentException{
+    public void lock(@Nonnull TimeUnit unit, @Nonnegative long lease_time) throws IllegalArgumentException {
 
         // Check parameter
-        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
         if(lease_time <= 0) throw new IllegalArgumentException("lease_time parameter is below the minimum value of 1");
 
         // Call it
@@ -44,7 +46,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @param unit the time unit of the time argument
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
      */
-    private void innerLock(final TimeUnit unit, final long lease_time){
+    private void innerLock(@Nullable TimeUnit unit, @Nonnegative long lease_time) {
         try{
             this.innerLockInterruptibly(unit, lease_time);
         }catch(InterruptedException e){
@@ -69,10 +71,9 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lockInterruptibly--">Lock.lockInterruptibly()</a>
      */
-    public void lockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
+    public void lockInterruptibly(@Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException {
 
         // Check parameter
-        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
         if(lease_time <= 0) throw new IllegalArgumentException("lease_time parameter is below the minimum value of 1");
 
         // Call it
@@ -85,7 +86,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lockInterruptibly--">Lock.lockInterruptibly()</a>
      */
-    private void innerLockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
+    private void innerLockInterruptibly(@Nullable TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException {
 
         //System.out.println("SingleNodeWriteLock::innerLockInterruptibly() id= " + this.id + " timeunit=" + unit + " lease_time=" + lease_time);
 
@@ -93,7 +94,8 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
         if(this.is_locked) return;
 
         // Lock it
-        if(unit == null) this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, false, this.rrwl.isFair(), -1, unit);
+        if (unit == null)
+            this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, false, this.rrwl.isFair(), -1, null);
         else this.is_locked = this.rrwl.getClient().performLock(this.rrwl.getLockpoint(), this.id + "", false, false, this.rrwl.isFair(), -1, unit, lease_time);
     }
 
@@ -116,10 +118,9 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @return true if the lock was acquired and false otherwise
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock--">Lock.tryLock()</a>
      */
-    public boolean tryLock(final TimeUnit unit, final long lease_time){
+    public boolean tryLock(@Nonnull TimeUnit unit, @Nonnegative long lease_time) {
 
         // Check parameters
-        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
         if(lease_time <= 0) throw new IllegalArgumentException("lease_time parameter is below the minimum value of 1");
 
         // Lock it
@@ -138,10 +139,9 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
-    public boolean tryLock(final long time, final TimeUnit unit) throws InterruptedException{
+    public boolean tryLock(@Nonnegative long time, @Nonnull TimeUnit unit) throws InterruptedException {
 
         // Check parameters
-        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
         if(time <= 0) throw new IllegalArgumentException("time parameter is below the minimum value of 1");
 
         // Lock it
@@ -156,10 +156,9 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
-    public boolean tryLock(final long wait_time, final TimeUnit unit, final long lease_time) throws InterruptedException{
+    public boolean tryLock(@Nonnegative long wait_time, @Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException {
 
         // Check parameters
-        if(unit == null) throw new IllegalArgumentException("unit parameter is null");
         if(wait_time <= 0) throw new IllegalArgumentException("wait_time parameter is below the minimum value of 1");
         if(lease_time <= 0) throw new IllegalArgumentException("wait_time parameter is below the minimum value of 1");
 
@@ -167,7 +166,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
         return this.innerTryLock(wait_time, unit, lease_time);
     }
 
-    private boolean innerTryLock(final long wait_time, final TimeUnit unit, final long lease_time) throws InterruptedException{
+    private boolean innerTryLock(@Nonnegative long wait_time, @Nullable TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException {
 
         // Short circuit
         if(this.is_locked) return true;
@@ -182,6 +181,7 @@ class SingleNodeWriteLock extends GenericLock implements AutoCloseableRedisLock{
      *  @throws UnsupportedOperationException if the RedisClient does not support this
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#newCondition--">Lock.newCondition()</a>
      */
+    @Nonnull
     public Condition newCondition() throws UnsupportedOperationException{
         throw new UnsupportedOperationException(this.getClass().getName() + " does not support newCondition() for write locks");
     }

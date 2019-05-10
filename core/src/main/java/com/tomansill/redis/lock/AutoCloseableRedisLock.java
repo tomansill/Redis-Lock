@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
 import java.util.concurrent.TimeUnit;
 
 public interface AutoCloseableRedisLock extends AutoCloseableLock, RedisLock{
@@ -9,7 +11,7 @@ public interface AutoCloseableRedisLock extends AutoCloseableLock, RedisLock{
      *  @param unit the time unit of the time argument
      *  @return Locked lock
      */
-    AutoCloseableRedisLock doLock(TimeUnit unit, long lease_time);
+    AutoCloseableRedisLock doLock(@Nonnull TimeUnit unit, @Nonnegative long lease_time);
 
     /** Performs lockInterruptibly() and returns the lock
      *  @param lease_time lock lease time
@@ -17,5 +19,10 @@ public interface AutoCloseableRedisLock extends AutoCloseableLock, RedisLock{
      *  @return Locked lock
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      */
-    AutoCloseableRedisLock doLockInterruptibly(TimeUnit unit, long lease_time) throws InterruptedException;
+    AutoCloseableRedisLock doLockInterruptibly(@Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException;
+
+    @Override
+    default void lock(@Nonnull TimeUnit unit, @Nonnegative long lease_time) {
+
+    }
 }

@@ -3,6 +3,8 @@ package com.tomansill.redis.jedis;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPubSub;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -17,16 +19,14 @@ public class JedisPubSubManager{
 
 	private final ReentrantLock lock = new ReentrantLock(true);
 
-	public JedisPubSubManager(final Jedis jedis){
+	public JedisPubSubManager(@Nonnull Jedis jedis) {
 		this.connection = jedis;
 	}
 
-	public void subscribe(final String channel, final Consumer<String> function){
+	public void subscribe(@Nonnull String channel, @Nonnull Consumer<String> function) {
 
 		// Check input
-		if(channel == null) throw new IllegalArgumentException("channel is null");
 		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
-		if(function == null) throw new IllegalArgumentException("function is null");
 
 		// Lock it
 		lock.lock();
@@ -40,7 +40,7 @@ public class JedisPubSubManager{
 			else{
 
 				// Create new listener
-				this.pubsub = new CustomPubSub();
+				this.pubsub = new CustomPubSub(channel_function_map);
 
 				// Fire it
 				new Thread(() -> connection.subscribe(pubsub, channel)).start();
@@ -58,10 +58,9 @@ public class JedisPubSubManager{
 		}
 	}
 
-	public void unsubscribe(final String channel){
+	public void unsubscribe(@Nonnull String channel) {
 
 		// Check input
-		if(channel == null) throw new IllegalArgumentException("channel is null");
 		if(channel.isEmpty()) throw new IllegalArgumentException("channel is empty");
 
 		// Lock it
@@ -91,9 +90,16 @@ public class JedisPubSubManager{
 		}
 	}
 
-	private class CustomPubSub extends JedisPubSub{
+	private static class CustomPubSub extends JedisPubSub {
+
+		private final ConcurrentHashMap<String, Consumer<String>> channel_function_map;
+
+		private CustomPubSub(@Nonnull ConcurrentHashMap<String, Consumer<String>> channel_function_map) {
+			this.channel_function_map = channel_function_map;
+		}
+
 		@Override
-		public void onMessage(final String channel, final String message){
+		public void onMessage(@Nullable String channel, @Nullable String message) {
 
 			// If null, ignore
 			if(channel == null) return;

@@ -1,5 +1,7 @@
 package com.tomansill.redis.lock;
 
+import javax.annotation.Nonnegative;
+import javax.annotation.Nonnull;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
@@ -23,10 +25,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @param rrwl Parent RedisReadWriteLock instance
      *  @throws IllegalArgumentException thrown when rrwl is null
      */
-    protected GenericLock(final RedisReadWriteLock rrwl) throws IllegalArgumentException{
-
-        // Check parameter
-        if(rrwl == null) throw new IllegalArgumentException("'rrwl' parameter in GenericLock(RedisReadWriteLock) is null");
+    protected GenericLock(@Nonnull RedisReadWriteLock rrwl) throws IllegalArgumentException {
 
         // Assign parameter to class variable
         this.rrwl = rrwl;
@@ -52,7 +51,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @param unit the time unit of the time argument
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lock--">Lock.lock()</a>
      */
-    public abstract void lock(final TimeUnit unit, final long lease_time);
+    public abstract void lock(@Nonnull TimeUnit unit, @Nonnegative long lease_time);
 
     /** Acquires the lock unless the current thread is interrupted.
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
@@ -66,7 +65,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#lockInterruptibly--">Lock.lockInterruptibly()</a>
      */
-    public abstract void lockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException;
+    public abstract void lockInterruptibly(@Nonnull TimeUnit unit, long lease_time) throws InterruptedException;
 
     /** Acquires the lock only if it is free at the time of invocation.
      *  @return true if the lock was acquired and false otherwise
@@ -80,7 +79,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @return true if the lock was acquired and false otherwise
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock--">Lock.tryLock()</a>
      */
-    public abstract boolean tryLock(final TimeUnit unit, final long lease_time);
+    public abstract boolean tryLock(@Nonnull TimeUnit unit, @Nonnegative long lease_time);
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
      *  @param time the maximum time to wait for the lock
@@ -89,7 +88,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
-    public abstract boolean tryLock(final long time, final TimeUnit unit) throws InterruptedException;
+    public abstract boolean tryLock(@Nonnegative long time, @Nonnull TimeUnit unit) throws InterruptedException;
 
     /** Acquires the lock if it is free within the given waiting time and the current thread has not been interrupted.
      *  @param wait_time the maximum time to wait for the lock
@@ -99,7 +98,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      *  @see <a href="https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/locks/Lock.html#tryLock-long-java.util.concurrent.TimeUnit-">Lock.tryLock(long,TimeUnit)</a>
      */
-    public abstract boolean tryLock(final long wait_time, final TimeUnit unit, final long lease_time) throws InterruptedException;
+    public abstract boolean tryLock(@Nonnegative long wait_time, @Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException;
 
     /** Performs lock() and returns the lock
      *  @return Locked lock
@@ -114,7 +113,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @param unit the time unit of the time argument
      *  @return Locked lock
      */
-    public GenericLock doLock(final TimeUnit unit, final long lease_time){
+    public GenericLock doLock(@Nonnull TimeUnit unit, @Nonnegative long lease_time) {
         this.lock(unit, lease_time);
         return this;
     }
@@ -134,7 +133,7 @@ abstract class GenericLock implements AutoCloseableRedisLock{
      *  @return Locked lock
      *  @throws InterruptedException if the current thread is interrupted while acquiring the lock (and interruption of lock acquisition is supported)
      */
-    public GenericLock doLockInterruptibly(final TimeUnit unit, final long lease_time) throws InterruptedException{
+    public GenericLock doLockInterruptibly(@Nonnull TimeUnit unit, @Nonnegative long lease_time) throws InterruptedException {
         this.lockInterruptibly(unit, lease_time);
         return this;
     }
