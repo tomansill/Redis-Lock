@@ -248,7 +248,7 @@ public abstract class AbstractRedisLockClient{
     public long getLeaseDuration(@Nonnull TimeUnit unit) throws IllegalArgumentException {
 
         // Return it
-        return lease_duration.getTime(unit);
+        return this.lease_duration.getTime(unit);
     }
 
     /**
@@ -262,10 +262,12 @@ public abstract class AbstractRedisLockClient{
         this.lease_duration.set(time, unit);
     }
 
+    @Nonnull
     public RedisReadWriteLock getLock(@Nonnull String lockpoint) {
         return new RedisReadWriteLock(lockpoint, this);
     }
 
+    @Nonnull
     public RedisReadWriteLock getLock(@Nonnull String lockpoint, boolean is_fair) {
         return new RedisReadWriteLock(lockpoint, this, is_fair);
     }
@@ -823,6 +825,7 @@ public abstract class AbstractRedisLockClient{
             this.unit = unit;
         }
 
+        @Nonnull
         synchronized TimeUnit getUnit() {
             return this.unit;
         }

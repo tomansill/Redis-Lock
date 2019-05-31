@@ -1,5 +1,7 @@
-package com.tomansill.redis.lock;
+package com.tomansill.redis.lock.old;
 
+import com.tomansill.redis.test.util.JedisPubSubManager;
+import com.tomansill.redis.lock.TestUtility;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -15,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static com.tomansill.redis.lock.Utility.generateRandomString;
 import static org.junit.Assume.assumeNotNull;
 import static org.junit.Assume.assumeTrue;
 
@@ -140,7 +143,7 @@ public class TestLuaScriptBenchmark{
 			counter++;
 		}
 
-		String str = Utility.generateRandomString(4);
+		String str = generateRandomString(4);
 
 		// Grab a connection
 		Jedis jedis = POOL.getResource();
@@ -184,7 +187,7 @@ public class TestLuaScriptBenchmark{
 
 		compute(test, new ArrayList<>(), 3);
 
-		String lockname = Utility.generateRandomString(4);
+		String lockname = generateRandomString(4);
 
 		int counter = 0;
 		for(ArrayList<Boolean> list : test){
@@ -239,7 +242,7 @@ public class TestLuaScriptBenchmark{
 					10,
 					 lockname,
 					"client1",
-					Utility.generateRandomString(4),
+					generateRandomString(4),
 					(booleans[0] ? "1" : "0"),
 					(booleans[1] ? "1" : "0"),
 					100 + "",

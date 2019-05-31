@@ -1,5 +1,6 @@
-package com.tomansill.redis.lock;
+package com.tomansill.redis.lock.old;
 
+import com.tomansill.redis.lock.TestUtility;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -23,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static com.tomansill.redis.lock.Utility.generateRandomString;
 import static org.junit.Assert.*;
 
 @Ignore
@@ -139,7 +141,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -198,7 +200,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -323,7 +325,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -442,7 +444,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_lock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_lock"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -591,7 +593,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_unlock' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_unlock"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){
@@ -675,7 +677,7 @@ public class TestScripts1{
 		assertTrue("Script name 'single_instance_refire' is not available. We cannot test this", SCRIPT_NAME_TO_SCRIPTS.containsKey("single_instance_refire"));
 
 		// Create a random key
-		String key = Utility.generateRandomString(8);
+		String key = generateRandomString(8);
 
 		// Grab a connection
 		try(Jedis jedis = pool.getResource()){

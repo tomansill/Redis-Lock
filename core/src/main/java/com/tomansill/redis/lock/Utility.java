@@ -3,10 +3,11 @@ package com.tomansill.redis.lock;
 import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.Base64;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -81,5 +82,67 @@ public final class Utility {
     public static <T> T checkValueForNull(@Nullable T value, @Nonnull String variable_name) {
     	if(value == null) throw new IllegalArgumentException(variable_name + " is null");
     	return value;
+    }
+
+    @Nonnull
+    public static String processScript(@Nonnull String script, boolean debug, @Nonnull String debug_output_channel){
+
+        // Split the script by lines
+        String[] lines = script.split("\n");
+
+        // Read the script
+        StringBuilder new_script = new StringBuilder();
+
+        boolean debug_block = false;
+        for(String line : lines){
+
+            //System.out.println(line);
+
+            // Get debug tag
+            int debug_index = line.indexOf("--!");
+            if (debug_index != -1) {
+
+                // If debug_block is false, expect 'start', otherwise expect 'end'
+                if (!debug_block) {
+                    if ((debug_index + "--!start".length()) <= line.length() && line.indexOf("start") == (debug_index + 3)) {
+                        debug_block = true;
+                        continue;
+                    }
+                } else {
+                    if ((debug_index + "--!end".length()) <= line.length() && line.indexOf("end") == (debug_index + 3)) {
+                        debug_block = false;
+                        continue;
+                    }
+                }
+
+                line = line.replace("--!", "");
+            }
+
+            // If debug is not enabled, don't copy any code in debug block
+            if (!debug_block || debug) {
+
+                // Remove all comments
+                int comment_index = line.indexOf("--");
+                if (comment_index != -1) line = line.substring(0, comment_index);
+
+                // Convert any 'debug_print' to redis pubsub print
+                if (debug) {
+                    line = line.replace("debug_print(", "redis.call(\"PUBLISH\", \"" + debug_output_channel + "\", ")
+                            .trim();
+                }
+
+                // Check if it's worth adding into output script
+                if (!line.trim().equals("")) {
+                    new_script.append(line);
+                    new_script.append('\n');
+                }
+            }
+        }
+
+        // Catch trailing debug block
+        if (debug_block) throw new RuntimeException("Trailing --!start debug block!");
+
+        // Return script block
+        return new_script.toString();
     }
 }

@@ -1,4 +1,4 @@
-package com.tomansill.redis.lock;
+package com.tomansill.redis.lock.old;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPubSub;
@@ -9,7 +9,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-public class JedisPubSubManager{
+public class JedisPubSubManager {
 
 	private final Jedis connection;
 
@@ -19,11 +19,11 @@ public class JedisPubSubManager{
 
 	private final ReentrantReadWriteLock rrwl = new ReentrantReadWriteLock();
 
-	public JedisPubSubManager(final Jedis jedis){
+	public JedisPubSubManager(Jedis jedis){
 		this.connection = jedis;
 	}
 
-	public void subscribe(final String channel, final Consumer<String> function){
+	public void subscribe(String channel, Consumer<String> function){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
@@ -60,11 +60,11 @@ public class JedisPubSubManager{
 		}
 	}
 
-	public void unsubscribe(final String channel){
+	public void unsubscribe(String channel){
 		this.unsubscribe(channel, true);
 	}
 
-	private void unsubscribe(final String channel, final boolean do_lock){
+	private void unsubscribe(String channel, boolean do_lock){
 
 		// Check input
 		if(channel == null) throw new IllegalArgumentException("channel is null");
@@ -105,7 +105,7 @@ public class JedisPubSubManager{
 
 	private class CustomPubSub extends JedisPubSub{
 		@Override
-		public void onMessage(final String channel, final String message){
+		public void onMessage(String channel, String message){
 
 			// If null, ignore
 			if(channel == null) return;
