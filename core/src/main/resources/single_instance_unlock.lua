@@ -1,9 +1,9 @@
 -- Input - lockpoint is_read_lock prefix is_owner
 
--- lockpoint - name of lockpoint
--- is_read_lock - true if lock is a readlock, false if it is a writelock
--- prefix - prefix for lock namespaces
--- is_owner - true if this lock owns the sharedlock
+-- KEYS[1] lockpoint - name of lockpoint
+-- KEYS[2] is_read_lock - true if lock is a readlock, false if it is a writelock
+-- KEYS[3] prefix - prefix for lock namespaces
+-- KEYS[4] is_owner - true if this lock owns the sharedlock
 
 -- Debug
 --!start
@@ -16,12 +16,12 @@ debug_print(debug_msg)
 --!end
 
 -- Initialization
-local lockpoint = KEYS[3] .. "lockpoint:" .. KEYS[1]
+local lockpoint = KEYS[3] .. ":lockpoint:" .. KEYS[1]
 local is_read_lock = tonumber(KEYS[2])
-local lockcount = KEYS[3] .. "lockcount:" .. KEYS[1]
-local lockwait = KEYS[3] .. "lockwait:" .. KEYS[1]
+local lockcount = KEYS[3] .. ":lockcount:" .. KEYS[1]
+local lockwait = KEYS[3] .. ":lockwait:" .. KEYS[1]
 local is_owner = tonumber(KEYS[4])
-local lockchannel = KEYS[3] .. "lockchannel:" .. KEYS[1]
+local lockchannel = KEYS[3] .. ":lockchannel:" .. KEYS[1]
 
 -- Check if readlock
 if is_read_lock == 1 then
@@ -29,9 +29,13 @@ if is_read_lock == 1 then
     -- If lock owner, close the lockpoint
     if is_owner == 1 then
 
-        --!debug_print("single_instance_unlock owner closing readlock")
+        -- Debug
+        debug_print("single_instance_unlock owner closing readlock")
 
+        -- Get TTL
         local ttl = redis.call("PTTL", lockpoint);
+
+        -- Change lockpoint to closed and reset the expiration time TODO
         redis.call("SET", lockpoint, "closed");
         redis.call("PEXPIRE", lockpoint, ttl)
     end
@@ -39,12 +43,14 @@ if is_read_lock == 1 then
     -- Decrement the lockcount
     local ownership_count = redis.call("DECR", lockcount);
 
-    --!debug_print("single_instance_unlock decrementing lockcount. Current: " .. ownership_count)
+    -- Debug
+    debug_print("single_instance_unlock decrementing lockcount. Current: " .. ownership_count)
 
     -- If the ownership count is zero, then lockpoint and lockcount should be deleted, resulting in unlocking it
     if(ownership_count ~= 0) then
 
-        --!debug_print("single_instance_unlock exits early because ownership_count is not zero")
+        -- Debug
+        debug_print("single_instance_unlock exits early because ownership_count is not zero")
 
         return 0; -- exit the function early
     else
@@ -53,7 +59,8 @@ if is_read_lock == 1 then
     end
 end
 
---!debug_print("single_instance_unlock deletes lockpoint. " .. lockpoint)
+-- Debug
+debug_print("single_instance_unlock deletes lockpoint. " .. lockpoint)
 
 -- Delete key and publish that lock has been released
 redis.call("DEL", lockpoint)
@@ -61,7 +68,8 @@ redis.call("DEL", lockpoint)
 -- Get from lockwait (no pop)
 local element = redis.call("LINDEX", lockwait, 0)
 
---debug_print("element: " .. element)
+-- Debug
+debug_print("element: " .. element)
 
 -- If empty, either nobody is waiting on queue or there's unfair locks waiting for it
 if(not element) then

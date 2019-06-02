@@ -4,7 +4,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.tomansill.redis.lock</groupId>
+        <groupId>com.tomansill.old.redis.lock</groupId>
         <artifactId>redis-lock</artifactId>
         <version>0.0.0</version>
         <relativePath>../</relativePath>
@@ -16,15 +16,24 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
 
     <packaging>jar</packaging>
 
+    <properties>
+        <jedis.version>3.0.1</jedis.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
-            <version>${jedis_version}</version>
+            <version>${jedis.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.tomansill.redis.lock</groupId>
+            <groupId>com.ansill.redis</groupId>
+            <artifactId>jedis-pubsub-manager</artifactId>
+            <version>0.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.tomansill.old.redis.lock</groupId>
             <artifactId>redis-lock-test-util</artifactId>
             <version>0.0.0</version>
             <scope>test</scope>
